@@ -76,7 +76,15 @@ public sealed class MultiHeadAttention
 
         // Derive actual head dimensions from the projected tensor shapes
         // to avoid mismatches between config values and real weight sizes.
-        var headDim = qProj.Shape[1] / _numQueryHeads;
+        var qProjDim = qProj.Shape[1];
+
+        if (qProjDim % _numQueryHeads != 0)
+        {
+            throw new InvalidOperationException(
+                $"Query projection dimension {qProjDim} is not evenly divisible by the number of query heads {_numQueryHeads}.");
+        }
+
+        var headDim = qProjDim / _numQueryHeads;
 
         // Reshape to [numHeads, seqLen, headDim]
         var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, headDim);
