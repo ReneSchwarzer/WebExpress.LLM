@@ -298,4 +298,26 @@ public sealed class TensorTests
         var a = WebExpress.LLM.Tensor.Tensor.FromArray([1f, 2, 3]);
         Assert.Throws<InvalidOperationException>(() => a.GetRow(0));
     }
+
+    [Fact]
+    public void GetRow_NegativeIndex_ShouldThrow()
+    {
+        var a = new WebExpress.LLM.Tensor.Tensor([3, 2], [1f, 2, 3, 4, 5, 6]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => a.GetRow(-1));
+    }
+
+    [Fact]
+    public void GetRow_IndexEqualToFirstDimension_ShouldThrow()
+    {
+        var a = new WebExpress.LLM.Tensor.Tensor([3, 2], [1f, 2, 3, 4, 5, 6]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => a.GetRow(3));
+    }
+
+    [Fact]
+    public void GetRow_IndexBeyondFirstDimension_ShouldThrow()
+    {
+        var a = new WebExpress.LLM.Tensor.Tensor([2, 3], [1f, 2, 3, 4, 5, 6]);
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => a.GetRow(5));
+        Assert.Contains("5", ex.Message);
+    }
 }

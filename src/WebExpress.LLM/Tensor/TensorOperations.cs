@@ -440,9 +440,18 @@ public static class TensorOperations
         var seqLen = tokenIds.Length;
         var result = new float[seqLen * hiddenSize];
 
+        var vocabSize = embeddingWeights.Shape[0];
+
         for (var i = 0; i < seqLen; i++)
         {
             var tokenId = tokenIds[i];
+
+            if (tokenId < 0 || tokenId >= vocabSize)
+            {
+                throw new ArgumentOutOfRangeException(nameof(tokenIds),
+                    $"Token ID {tokenId} at position {i} is out of range for vocabulary size {vocabSize}.");
+            }
+
             Array.Copy(embeddingWeights.Data, tokenId * hiddenSize, result, i * hiddenSize, hiddenSize);
         }
 
