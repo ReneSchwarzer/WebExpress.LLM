@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using WebExpress.LLM.Gemma;
 using WebExpress.LLM.Model;
@@ -242,7 +241,7 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             // If the model uses sharded weights, use the sharded loader directly
             if (model.ShardedLoader != null)
             {
-                if (!model.ShardedLoader.ContainsTensor("model.embed_tokens.weight"))
+                if (!model.ShardedLoader.ContainsTensor("model.language_model.embed_tokens.weight"))
                 {
                     return null;
                 }
@@ -259,7 +258,7 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             var loader = new SafeTensorLoader(model.Weights);
 
             // Verify that the weights contain the expected embedding tensor
-            if (!loader.ContainsTensor("model.embed_tokens.weight"))
+            if (!loader.ContainsTensor("model.language_model.embed_tokens.weight"))
             {
                 return null;
             }

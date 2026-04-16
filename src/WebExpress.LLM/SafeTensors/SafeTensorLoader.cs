@@ -35,7 +35,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     public SafeTensorLoader(ModelWeights weights)
     {
         _weights = weights ?? throw new ArgumentNullException(nameof(weights));
-        _metadata = new Dictionary<string, TensorMetadata>();
+        _metadata = [];
 
         if (weights.Length < 8)
         {

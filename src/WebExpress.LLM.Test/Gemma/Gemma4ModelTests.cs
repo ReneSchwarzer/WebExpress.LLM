@@ -4,7 +4,6 @@ using System.Text.Json;
 using WebExpress.LLM.Gemma;
 using WebExpress.LLM.Model;
 using WebExpress.LLM.SafeTensors;
-using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
@@ -181,7 +180,7 @@ public sealed class Gemma4ModelTests
         var tensors = new Dictionary<string, (string dtype, long[] shape, float[] data)>();
 
         // Embedding
-        tensors["model.embed_tokens.weight"] = ("F32", [vocabSize, hiddenSize],
+        tensors["model.language_model.embed_tokens.weight"] = ("F32", [vocabSize, hiddenSize],
             CreateRandomData(vocabSize * hiddenSize));
 
         // Final norm

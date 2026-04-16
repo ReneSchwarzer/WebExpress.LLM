@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using WebExpress.LLM.Model;
 using WebExpress.LLM.SafeTensors;
 using WebExpress.LLM.Tensor;
@@ -69,7 +68,7 @@ public sealed class Gemma4Model
         var rmsEps = _config.RmsNormEpsilon;
 
         // 1. Token embedding lookup
-        var embedWeight = _loader.LoadTensor("model.embed_tokens.weight");
+        var embedWeight = _loader.LoadTensor("model.language_model.embed_tokens.weight");
         var hidden = TensorOperations.EmbeddingLookup(embedWeight, tokenIds);
 
         // Scale embeddings by sqrt(hidden_size) as per Gemma convention
@@ -121,7 +120,7 @@ public sealed class Gemma4Model
         Tensor.Tensor hidden, int layerIndex,
         int numQueryHeads, int numKvHeads, int headDim, float rmsEps)
     {
-        var prefix = $"model.layers.{layerIndex}";
+        var prefix = $"model.language_model.layers.{layerIndex}";
 
         // Determine attention type for this layer
         var layerTypes = _config.TextConfig?.LayerTypes;
