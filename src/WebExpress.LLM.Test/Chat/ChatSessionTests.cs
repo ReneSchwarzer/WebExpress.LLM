@@ -41,5 +41,13 @@ public sealed class ChatSessionTests
     private sealed class MockInferenceEngine : IInferenceEngine
     {
         public IReadOnlyList<int> GenerateTokens(IReadOnlyList<int> promptTokens, int maxNewTokens) => [65, 66, 67];
+
+        public async IAsyncEnumerable<int> GenerateTokensAsync(IReadOnlyList<int> promptTokens, int maxNewTokens)
+        {
+            await Task.CompletedTask;
+            yield return 65;
+            yield return 66;
+            yield return 67;
+        }
     }
 }

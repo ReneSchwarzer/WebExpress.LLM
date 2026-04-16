@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using WebExpress.LLM.Chat;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Model;
@@ -21,7 +22,7 @@ internal class Program
     /// Command-line arguments. The first argument, if provided, should be the path to the
     /// configuration file. If not provided, the default configuration file will be used.
     /// </param>
-    private static void Main(string[] args)
+    private static async Task Main(string[] args)
     {
         // display welcome message to the user
         System.Console.WriteLine("WebExpress.LLM - Interactive Chat");
@@ -154,11 +155,15 @@ internal class Program
 
             try
             {
-                // send the user's message to the chat session and generate a response
-                var response = chatSession.Send(userInput, maxNewTokens: maxNewTokens);
+                // send the user's message to the chat session and stream the response
+                System.Console.Write("Assistant: ");
 
-                // display the assistant's response to the user
-                System.Console.WriteLine($"Assistant: {response.Content}");
+                await foreach (var textChunk in chatSession.SendAsync(userInput, maxNewTokens: maxNewTokens))
+                {
+                    System.Console.Write(textChunk);
+                }
+
+                System.Console.WriteLine();
                 System.Console.WriteLine();
             }
             catch (Exception ex)

@@ -11,7 +11,7 @@ namespace WebExpress.LLM.Inference;
 public interface IInferenceEngine
 {
     /// <summary>
-    /// Generates a sequence of new tokens based on the provided input tokens and the maximum number  
+    /// Generates a sequence of new tokens based on the provided input tokens and the maximum number
     /// of new tokens to produce.
     /// </summary>
     /// <param name="promptTokens">
@@ -21,8 +21,22 @@ public interface IInferenceEngine
     /// The maximum number of new tokens to generate. Must be greater than 0.
     /// </param>
     /// <returns>
-    /// A read‑only list of integers containing the generated tokens.  
+    /// A read‑only list of integers containing the generated tokens.
     /// The list may be empty if no new tokens are produced.
     /// </returns>
     IReadOnlyList<int> GenerateTokens(IReadOnlyList<int> promptTokens, int maxNewTokens);
+
+    /// <summary>
+    /// Asynchronously generates tokens one at a time, yielding each token as it is produced.
+    /// </summary>
+    /// <param name="promptTokens">
+    /// The list of input tokens used as the starting point for generation. Must not be null.
+    /// </param>
+    /// <param name="maxNewTokens">
+    /// The maximum number of new tokens to generate. Must be greater than 0.
+    /// </param>
+    /// <returns>
+    /// An async enumerable that yields generated tokens one at a time.
+    /// </returns>
+    IAsyncEnumerable<int> GenerateTokensAsync(IReadOnlyList<int> promptTokens, int maxNewTokens);
 }
