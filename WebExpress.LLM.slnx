@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WebExpress.LLM.Test/WebExpress.LLM.Test.csproj" />
+    <Project Path="src/WebExpress.LLM/WebExpress.LLM.csproj" />
+  </Folder>
+</Solution>
