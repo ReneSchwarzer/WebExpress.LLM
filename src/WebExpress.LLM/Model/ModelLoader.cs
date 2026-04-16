@@ -13,6 +13,13 @@ public sealed class ModelLoader
     public const string DefaultConfigurationFileName = "config.json";
     public const string DefaultWeightsFileName = "model.weights";
 
+    private static readonly string[] SupportedWeightFileNames =
+    [
+        "model.safetensors",
+        "model.weights",
+        "pytorch_model.bin"
+    ];
+
     /// <summary>
     /// Loads a model definition from the specified directory, including its configuration and weights files.
     /// </summary>
@@ -40,16 +47,30 @@ public sealed class ModelLoader
         }
 
         var configurationPath = Path.Combine(modelDirectory, DefaultConfigurationFileName);
-        var weightsPath = Path.Combine(modelDirectory, DefaultWeightsFileName);
 
         if (!File.Exists(configurationPath))
         {
             throw new FileNotFoundException("Model configuration file was not found.", configurationPath);
         }
 
-        if (!File.Exists(weightsPath))
+        // Try to find weights file using supported file names
+        string weightsPath = null;
+        foreach (var weightsFileName in SupportedWeightFileNames)
         {
-            throw new FileNotFoundException("Model weights file was not found.", weightsPath);
+            var candidatePath = Path.Combine(modelDirectory, weightsFileName);
+            if (File.Exists(candidatePath))
+            {
+                weightsPath = candidatePath;
+                break;
+            }
+        }
+
+        if (weightsPath == null)
+        {
+            var supportedFormats = string.Join(", ", SupportedWeightFileNames);
+            throw new FileNotFoundException(
+                $"Model weights file was not found. Supported formats: {supportedFormats}",
+                Path.Combine(modelDirectory, "<weights-file>"));
         }
 
         var configurationJson = File.ReadAllText(configurationPath);
