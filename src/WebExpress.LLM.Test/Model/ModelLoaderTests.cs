@@ -169,4 +169,80 @@ public sealed class ModelLoaderTests
             Directory.Delete(tempPath, recursive: true);
         }
     }
+
+    [Fact]
+    public void Load_ShouldThrowWhenVocabularySizeIsZero()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            var configuration = new ModelConfiguration
+            {
+                ModelName = "test-model",
+                VocabularySize = 0,
+                ContextLength = 2048,
+                HiddenSize = 512,
+                IntermediateSize = 2048,
+                NumberOfLayers = 6,
+                NumberOfAttentionHeads = 8,
+                NumberOfKeyValueHeads = 1,
+                HeadDimension = 64
+            };
+
+            File.WriteAllText(
+                Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
+                JsonSerializer.Serialize(configuration));
+            File.WriteAllBytes(Path.Combine(tempPath, ModelLoader.DefaultWeightsFileName), [1, 2, 3, 4]);
+
+            var loader = new ModelLoader();
+            var exception = Assert.Throws<InvalidDataException>(() => loader.Load(tempPath));
+
+            Assert.Contains("invalid vocabulary size", exception.Message);
+            Assert.Contains("must be greater than zero", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ShouldThrowWhenContextLengthIsZero()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            var configuration = new ModelConfiguration
+            {
+                ModelName = "test-model",
+                VocabularySize = 32000,
+                ContextLength = 0,
+                HiddenSize = 512,
+                IntermediateSize = 2048,
+                NumberOfLayers = 6,
+                NumberOfAttentionHeads = 8,
+                NumberOfKeyValueHeads = 1,
+                HeadDimension = 64
+            };
+
+            File.WriteAllText(
+                Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
+                JsonSerializer.Serialize(configuration));
+            File.WriteAllBytes(Path.Combine(tempPath, ModelLoader.DefaultWeightsFileName), [1, 2, 3, 4]);
+
+            var loader = new ModelLoader();
+            var exception = Assert.Throws<InvalidDataException>(() => loader.Load(tempPath));
+
+            Assert.Contains("invalid context length", exception.Message);
+            Assert.Contains("must be greater than zero", exception.Message);
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
 }
