@@ -9,6 +9,7 @@ REST APIs, or HTTP endpoints.
 ## Repository structure
 
 - `/src/WebExpress.LLM` – core framework library
+- `/src/WebExpress.LLM.Console` – interactive console application
 - `/src/WebExpress.LLM.Test` – xUnit test project
 - `/WebExpress.LLM.slnx` – solution file
 
@@ -38,6 +39,36 @@ The architecture is intentionally modular to enable extensions such as additiona
 dotnet build src/WebExpress.LLM.slnx
 dotnet test src/WebExpress.LLM.slnx
 ```
+
+## Running the console application
+
+The `WebExpress.LLM.Console` project provides an interactive chat interface for conversing with the language model.
+
+### Basic usage (with deterministic inference)
+
+```bash
+cd src/WebExpress.LLM.Console
+dotnet run
+```
+
+When run without arguments, the console application uses a deterministic inference engine for demonstration purposes.
+
+### Using with a real model
+
+```bash
+cd src/WebExpress.LLM.Console
+dotnet run -- /path/to/model/directory
+```
+
+The model directory must contain:
+- `config.json` – model configuration file
+- `model.weights` – model weights file
+
+### Interactive commands
+
+Once the console application is running:
+- Type your messages and press Enter to receive responses from the assistant
+- Type `exit` or `quit` to end the session
 
 ## Example usage
 

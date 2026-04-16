@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="WebExpress.LLM.Console/WebExpress.LLM.Console.csproj" />
   <Project Path="WebExpress.LLM.Test/WebExpress.LLM.Test.csproj" />
   <Project Path="WebExpress.LLM/WebExpress.LLM.csproj" />
 </Solution>
