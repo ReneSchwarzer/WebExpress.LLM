@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using WebExpress.LLM.Gemma;
@@ -254,9 +255,14 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
 
             return new Gemma4Model(model.Configuration, loader);
         }
-        catch
+        catch (Exception ex) when (
+            ex is InvalidDataException ||
+            ex is KeyNotFoundException ||
+            ex is ArgumentException ||
+            ex is FormatException ||
+            ex is System.Text.Json.JsonException)
         {
-            // If weight parsing fails, fall back to placeholder
+            // If weight parsing fails for known reasons, fall back to placeholder
             return null;
         }
     }

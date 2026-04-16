@@ -192,14 +192,17 @@ public sealed class SafeTensorLoader
                 return BitConverter.Int32BitsToSingle((int)zeroBits);
             }
 
-            // Subnormal: normalize
+            // Subnormal: normalize by shifting mantissa until the implicit leading bit is set.
+            // The effective exponent for subnormals is 1 (not 0), so initialize to 1.
+            exponent = 1;
+
             while ((mantissa & 0x400) == 0)
             {
                 mantissa <<= 1;
                 exponent--;
             }
 
-            exponent++;
+            // Remove the now-explicit leading bit from the mantissa
             mantissa &= 0x3FF;
         }
         else if (exponent == 31)
@@ -209,7 +212,7 @@ public sealed class SafeTensorLoader
             return BitConverter.Int32BitsToSingle((int)specialBits);
         }
 
-        // Normal number
+        // Normal number (or normalized subnormal)
         exponent = exponent + (127 - 15); // Rebias from half to single
         var floatBits2 = (uint)((sign << 31) | (exponent << 23) | (mantissa << 13));
 

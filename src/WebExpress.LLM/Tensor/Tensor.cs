@@ -426,8 +426,8 @@ public sealed class Tensor
 
             for (var d = 0; d < outRank; d++)
             {
-                aIndex += indices[d] * aStrides.a[d];
-                bIndex += indices[d] * bStrides.a[d];
+                aIndex += indices[d] * aStrides[d];
+                bIndex += indices[d] * bStrides[d];
             }
 
             outData[i] = op(a._data[aIndex], b._data[bIndex]);
@@ -471,7 +471,7 @@ public sealed class Tensor
         return result;
     }
 
-    private static (int[] a, int[] b) ComputeBroadcastStrides(int[] shape, int[] outShape)
+    private static int[] ComputeBroadcastStrides(int[] shape, int[] outShape)
     {
         // Compute strides for shape relative to outShape for broadcasting
         var rank = outShape.Length;
@@ -504,6 +504,6 @@ public sealed class Tensor
             }
         }
 
-        return (strides, strides);
+        return strides;
     }
 }
