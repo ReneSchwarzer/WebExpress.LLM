@@ -42,22 +42,57 @@ dotnet test src/WebExpress.LLM.slnx
 
 ## Running the console application
 
-The `WebExpress.LLM.Console` project provides an interactive chat interface for conversing with the language model.
+The `WebExpress.LLM.Console` project provides an interactive chat interface for conversing with the language model. The application uses an XML configuration file located at `config/webexpress.llm.config.xml` that defines all runtime parameters including model paths, inference settings, and tokenizer options.
 
-### Basic usage (with deterministic inference)
+### Configuration file
+
+The configuration file (`config/webexpress.llm.config.xml`) contains:
+- **Model settings**: Model name and path to the model directory
+- **Inference settings**: MaxNewTokens, Temperature, TopK/TopP sampling, and optional Seed
+- **Tokenizer settings**: Type of tokenizer to use (currently "byte")
+- **Runtime settings**: Option to use deterministic inference engine for testing
+
+### Basic usage
 
 ```bash
 cd src/WebExpress.LLM.Console
 dotnet run
 ```
 
-When run without arguments, the console application uses a deterministic inference engine for demonstration purposes.
+The application will automatically load settings from the default configuration file. By default, it will attempt to load the model specified in the configuration file. If the model path does not exist, it will fall back to the deterministic inference engine.
 
-### Using with a real model
+### Using a custom configuration file
 
 ```bash
 cd src/WebExpress.LLM.Console
-dotnet run -- /path/to/model/directory
+dotnet run -- /path/to/custom/config.xml
+```
+
+### Configuration example
+
+The configuration file supports the following settings:
+
+```xml
+<?xml version="1.0" encoding="utf-8" ?>
+<config version="1">
+  <model name="google/gemma-4-E2B-it">
+    <path>../../../../../model/google/gemma-4-E2B-it</path>
+  </model>
+
+  <inference>
+    <maxNewTokens>100</maxNewTokens>
+    <temperature>1.0</temperature>
+    <!-- Optional: <topK>50</topK> -->
+    <!-- Optional: <topP>0.9</topP> -->
+    <!-- Optional: <seed>42</seed> -->
+  </inference>
+
+  <tokenizer type="byte" />
+
+  <runtime>
+    <useDeterministicEngine>false</useDeterministicEngine>
+  </runtime>
+</config>
 ```
 
 The model directory must contain:
