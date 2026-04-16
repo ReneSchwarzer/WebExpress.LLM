@@ -235,7 +235,6 @@ public sealed class Gemma4ModelTests
         {
             var prefix = $"model.language_model.layers.{layer}";
             var isFullAttention = layer < layerTypes.Length && layerTypes[layer] == "full_attention";
-            var layerHeadDim = isFullAttention ? globalHeadDim : headDim;
 
             // Norm weights
             tensors[$"{prefix}.input_layernorm.weight"] = ("F32", [hiddenSize],
@@ -243,21 +242,26 @@ public sealed class Gemma4ModelTests
             tensors[$"{prefix}.post_attention_layernorm.weight"] = ("F32", [hiddenSize],
                 CreateOnesData(hiddenSize));
 
-            // Attention projections
-            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * layerHeadDim, hiddenSize],
-                CreateRandomData(numQueryHeads * layerHeadDim * hiddenSize));
-            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
-                CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
+            // Attention projections – for full-attention layers the query
+            // projection uses globalHeadDim while K/V use the base headDim,
+            // matching the real Gemma-4 weight layout.
+            var qLayerHeadDim = isFullAttention ? globalHeadDim : headDim;
+            var kvLayerHeadDim = headDim;
+
+            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * qLayerHeadDim, hiddenSize],
+                CreateRandomData(numQueryHeads * qLayerHeadDim * hiddenSize));
+            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * kvLayerHeadDim, hiddenSize],
+                CreateRandomData(numKvHeads * kvLayerHeadDim * hiddenSize));
 
             // Only emit v_proj when K and V are not shared
             if (!attentionKeyEqualsValue)
             {
-                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
-                    CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
+                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * kvLayerHeadDim, hiddenSize],
+                    CreateRandomData(numKvHeads * kvLayerHeadDim * hiddenSize));
             }
 
-            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * layerHeadDim],
-                CreateRandomData(hiddenSize * numQueryHeads * layerHeadDim));
+            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * kvLayerHeadDim],
+                CreateRandomData(hiddenSize * numQueryHeads * kvLayerHeadDim));
 
             // FFN projections
             tensors[$"{prefix}.mlp.gate_proj.weight"] = ("F32", [intermediateSize, hiddenSize],

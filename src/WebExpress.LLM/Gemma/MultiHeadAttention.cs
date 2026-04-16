@@ -76,7 +76,11 @@ public sealed class MultiHeadAttention
 
         // Derive actual head dimensions from the projected tensor shapes
         // to avoid mismatches between config values and real weight sizes.
+        // In Gemma-4 full attention layers the query projection may use a
+        // larger per-head dimension (global_head_dim) than the key/value
+        // projections (head_dim), so each must be derived independently.
         var qProjDim = qProj.Shape[1];
+        var kProjDim = kProj.Shape[1];
 
         if (qProjDim % _numQueryHeads != 0)
         {
@@ -84,12 +88,19 @@ public sealed class MultiHeadAttention
                 $"Query projection dimension {qProjDim} is not evenly divisible by the number of query heads {_numQueryHeads}.");
         }
 
-        var headDim = qProjDim / _numQueryHeads;
+        if (kProjDim % _numKvHeads != 0)
+        {
+            throw new InvalidOperationException(
+                $"Key projection dimension {kProjDim} is not evenly divisible by the number of KV heads {_numKvHeads}.");
+        }
+
+        var qHeadDim = qProjDim / _numQueryHeads;
+        var kvHeadDim = kProjDim / _numKvHeads;
 
         // Reshape to [numHeads, seqLen, headDim]
-        var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, headDim);
-        var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, headDim);
-        var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, headDim);
+        var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, qHeadDim);
+        var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, kvHeadDim);
+        var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, kvHeadDim);
 
         // Apply RoPE to Q and K
         var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
@@ -113,9 +124,11 @@ public sealed class MultiHeadAttention
             V = RepeatKvHeads(V, repeatFactor);
         }
 
-        // Compute attention scores: Q @ K^T / sqrt(headDim)
+        // Compute attention scores: Q @ K^T / sqrt(dotDim)
+        // When Q has a larger head dimension than K (asymmetric head dims),
+        // the dot product uses only the first kvHeadDim dimensions of Q.
         var kvSeqLen = K.Shape[1];
-        var scores = ComputeAttentionScores(Q, K, _numQueryHeads, seqLen, kvSeqLen, headDim);
+        var scores = ComputeAttentionScores(Q, K, _numQueryHeads, seqLen, kvSeqLen, qHeadDim, kvHeadDim);
 
         // Apply attention mask
         ApplyMask(scores, seqLen, kvSeqLen, startPosition);
@@ -123,11 +136,11 @@ public sealed class MultiHeadAttention
         // Softmax over last dimension
         scores = TensorOperations.Softmax(scores);
 
-        // Attention output: scores @ V
-        var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, headDim);
+        // Attention output: scores @ V (result has kvHeadDim per head)
+        var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, kvHeadDim);
 
-        // Reshape from [numQueryHeads, seqLen, headDim] -> [seqLen, numQueryHeads * headDim]
-        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, headDim);
+        // Reshape from [numQueryHeads, seqLen, kvHeadDim] -> [seqLen, numQueryHeads * kvHeadDim]
+        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, kvHeadDim);
 
         // Output projection
         var output = TensorOperations.MatMul(concatenated, Transpose2D(oProjWeight));
@@ -219,18 +232,21 @@ public sealed class MultiHeadAttention
     }
 
     /// <summary>
-    /// Computes Q @ K^T / sqrt(headDim) for each head independently.
+    /// Computes Q @ K^T / sqrt(dotDim) for each head independently.
+    /// When Q and K have different per-head dimensions, the dot product
+    /// is computed over the smaller dimension (kvHeadDim).
     /// </summary>
     private static Tensor.Tensor ComputeAttentionScores(
-        Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int headDim)
+        Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int qHeadDim, int kvHeadDim)
     {
+        var dotDim = Math.Min(qHeadDim, kvHeadDim);
         var scores = new float[numHeads * queryLen * kvLen];
-        var scale = 1.0f / MathF.Sqrt(headDim);
+        var scale = 1.0f / MathF.Sqrt(dotDim);
 
         for (var h = 0; h < numHeads; h++)
         {
-            var qOffset = h * queryLen * headDim;
-            var kOffset = h * kvLen * headDim;
+            var qOffset = h * queryLen * qHeadDim;
+            var kOffset = h * kvLen * kvHeadDim;
             var sOffset = h * queryLen * kvLen;
 
             for (var i = 0; i < queryLen; i++)
@@ -239,9 +255,9 @@ public sealed class MultiHeadAttention
                 {
                     var dot = 0.0f;
 
-                    for (var d = 0; d < headDim; d++)
+                    for (var d = 0; d < dotDim; d++)
                     {
-                        dot += Q.Data[qOffset + i * headDim + d] * K.Data[kOffset + j * headDim + d];
+                        dot += Q.Data[qOffset + i * qHeadDim + d] * K.Data[kOffset + j * kvHeadDim + d];
                     }
 
                     scores[sOffset + i * kvLen + j] = dot * scale;

@@ -160,6 +160,39 @@ public sealed class MultiHeadAttentionTests
     }
 
     [Fact]
+    public void Forward_AsymmetricQKvHeadDim_ShouldProduceCorrectOutputShape()
+    {
+        // Reproduces the original bug: Q uses a larger per-head dimension
+        // (globalHeadDim) than K/V (headDim). Before the fix this threw:
+        //   "Input tensor length ... is too small for the requested reshape"
+        var numQueryHeads = 2;
+        var numKvHeads = 1;
+        var qHeadDim = 8;    // global_head_dim – larger
+        var kvHeadDim = 4;   // head_dim – smaller
+        var hiddenSize = 16;
+        var seqLen = 3;
+
+        var rope = new RotaryEmbedding(theta: 10000);
+        var attention = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, kvHeadDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope);
+
+        var input = CreateInput(seqLen, hiddenSize);
+
+        // Q projection uses qHeadDim, K/V projections use kvHeadDim
+        var qWeight = CreateWeight(numQueryHeads * qHeadDim, hiddenSize);
+        var kWeight = CreateWeight(numKvHeads * kvHeadDim, hiddenSize);
+        var vWeight = CreateWeight(numKvHeads * kvHeadDim, hiddenSize);
+        // Output projection matches attention output: numQueryHeads * kvHeadDim
+        var oWeight = CreateWeight(hiddenSize, numQueryHeads * kvHeadDim);
+
+        var result = attention.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        Assert.Equal(seqLen, result.Shape[0]);
+        Assert.Equal(hiddenSize, result.Shape[1]);
+    }
+
+    [Fact]
     public void Forward_NullRope_ShouldThrow()
     {
         Assert.Throws<ArgumentNullException>(() =>
