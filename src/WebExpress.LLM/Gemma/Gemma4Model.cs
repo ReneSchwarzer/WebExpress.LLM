@@ -153,7 +153,14 @@ public sealed class Gemma4Model
         // 2. Multi-head attention
         var qWeight = _loader.LoadTensor($"{prefix}.self_attn.q_proj.weight");
         var kWeight = _loader.LoadTensor($"{prefix}.self_attn.k_proj.weight");
-        var vWeight = _loader.LoadTensor($"{prefix}.self_attn.v_proj.weight");
+
+        // When attention_k_eq_v is true, K and V projections share the same weight
+        // and no separate v_proj.weight tensor exists in the model files.
+        var keyEqualsValue = _config.TextConfig?.AttentionKeyEqualsValue ?? false;
+        var vWeight = keyEqualsValue
+            ? kWeight
+            : _loader.LoadTensor($"{prefix}.self_attn.v_proj.weight");
+
         var oWeight = _loader.LoadTensor($"{prefix}.self_attn.o_proj.weight");
 
         var slidingWindow = _config.TextConfig?.SlidingWindow ?? 512;
