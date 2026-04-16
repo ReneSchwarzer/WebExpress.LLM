@@ -20,16 +20,21 @@ internal sealed class IntOrArrayConverter : JsonConverter<int>
 
         if (reader.TokenType == JsonTokenType.StartArray)
         {
-            var result = 0;
-            var first = true;
+            if (!reader.Read() || reader.TokenType == JsonTokenType.EndArray)
+            {
+                throw new JsonException("The 'eos_token_id' array must contain at least one integer element.");
+            }
 
+            if (reader.TokenType != JsonTokenType.Number)
+            {
+                throw new JsonException($"The first element of the 'eos_token_id' array must be an integer, but got {reader.TokenType}.");
+            }
+
+            var result = reader.GetInt32();
+
+            // Consume any remaining elements.
             while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
             {
-                if (first && reader.TokenType == JsonTokenType.Number)
-                {
-                    result = reader.GetInt32();
-                    first = false;
-                }
             }
 
             return result;
