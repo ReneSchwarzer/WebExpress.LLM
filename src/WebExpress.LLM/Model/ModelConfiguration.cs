@@ -26,8 +26,8 @@ public sealed class ModelConfiguration
     private readonly int _numberOfLayers;
     private readonly int _numberOfAttentionHeads;
     private readonly int _numberOfKeyValueHeads;
-    private readonly float _rmsNormEpsilon;
-    private readonly float _ropeTheta;
+    private readonly float? _rmsNormEpsilon;
+    private readonly float? _ropeTheta;
     private readonly int _headDimension;
 
     // -------------------------------------------------------------------------
@@ -272,7 +272,7 @@ public sealed class ModelConfiguration
     [JsonPropertyName("rms_norm_eps")]
     public float RmsNormEpsilon
     {
-        get => _rmsNormEpsilon != 0f ? _rmsNormEpsilon : TextConfig?.RmsNormEpsilon ?? 1e-6f;
+        get => _rmsNormEpsilon ?? TextConfig?.RmsNormEpsilon ?? 1e-6f;
         init => _rmsNormEpsilon = value;
     }
 
@@ -288,9 +288,9 @@ public sealed class ModelConfiguration
     {
         get
         {
-            if (_ropeTheta != 0f)
+            if (_ropeTheta.HasValue)
             {
-                return _ropeTheta;
+                return _ropeTheta.Value;
             }
 
             return TextConfig?.RopeParameters?.SlidingAttention?.RopeTheta
