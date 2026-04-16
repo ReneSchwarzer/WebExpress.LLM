@@ -76,12 +76,13 @@ public sealed class MultiHeadAttention
 
         // Derive actual head dimensions from the projected tensor shapes
         // to avoid mismatches between config values and real weight sizes.
-        // In Gemma-4 full attention layers:
-        //   Q uses global_head_dim (e.g. 512)
-        //   K uses head_dim (e.g. 128) – smaller, for attention score computation
-        //   V uses global_head_dim (e.g. 512) – same as Q, so scores @ V yields
-        //     the correct dimension for the output projection
-        // Each projection dimension is therefore derived independently.
+        // In Gemma-4 full attention layers with attention_k_eq_v:
+        //   Q uses global_head_dim (e.g. 512) per query head
+        //   K uses head_dim (e.g. 128) per KV head
+        //   V shares K's weight, so also uses head_dim per KV head
+        //   O expects numQueryHeads * global_head_dim (matches Q)
+        // The gap between vHeadDim and the o_proj expected dimension is
+        // bridged by concatenating unused Q dimensions ("pass-through").
         var qProjDim = qProj.Shape[1];
         var kProjDim = kProj.Shape[1];
         var vProjDim = vProj.Shape[1];
@@ -107,6 +108,18 @@ public sealed class MultiHeadAttention
         var qHeadDim = qProjDim / _numQueryHeads;
         var kHeadDim = kProjDim / _numKvHeads;
         var vHeadDim = vProjDim / _numKvHeads;
+
+        // Derive the expected per-head output dimension from the o_proj weight.
+        // o_proj weight shape: [hiddenSize, numQueryHeads * outputHeadDim]
+        var oProjInputDim = oProjWeight.Shape[1];
+
+        if (oProjInputDim % _numQueryHeads != 0)
+        {
+            throw new InvalidOperationException(
+                $"O projection input dimension {oProjInputDim} is not evenly divisible by the number of query heads {_numQueryHeads}.");
+        }
+
+        var outputHeadDim = oProjInputDim / _numQueryHeads;
 
         // Reshape to [numHeads, seqLen, headDim]
         var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, qHeadDim);
@@ -150,8 +163,23 @@ public sealed class MultiHeadAttention
         // Attention output: scores @ V (result has vHeadDim per head)
         var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, vHeadDim);
 
-        // Reshape from [numQueryHeads, seqLen, vHeadDim] -> [seqLen, numQueryHeads * vHeadDim]
-        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, vHeadDim);
+        // When V's per-head dimension (vHeadDim) is smaller than what o_proj
+        // expects (outputHeadDim), Q has extra dimensions beyond those used
+        // in the dot product with K.  These "pass-through" dimensions are
+        // concatenated with the attention output so the combined per-head
+        // dimension matches o_proj.  This occurs in Gemma-4 full attention
+        // layers when attention_k_eq_v is true (V = K, both use headDim)
+        // while Q and o_proj use the larger globalHeadDim.
+        var dotDim = Math.Min(qHeadDim, kHeadDim);
+
+        if (vHeadDim < outputHeadDim)
+        {
+            var passThroughDim = outputHeadDim - vHeadDim;
+            attnOutput = ConcatQPassThrough(attnOutput, Q, _numQueryHeads, seqLen, vHeadDim, qHeadDim, dotDim, passThroughDim);
+        }
+
+        // Reshape from [numQueryHeads, seqLen, outputHeadDim] -> [seqLen, numQueryHeads * outputHeadDim]
+        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, outputHeadDim);
 
         // Output projection
         var output = TensorOperations.MatMul(concatenated, Transpose2D(oProjWeight));
@@ -214,6 +242,38 @@ public sealed class MultiHeadAttention
         }
 
         return new Tensor.Tensor([seqLen, numHeads * headDim], result);
+    }
+
+    /// <summary>
+    /// Concatenates Q pass-through dimensions with the attention output.
+    /// When V's per-head dimension is smaller than o_proj's expected input,
+    /// Q has unused dimensions (beyond those used for the K dot product)
+    /// that are appended to the attention output for each head.
+    /// </summary>
+    private static Tensor.Tensor ConcatQPassThrough(
+        Tensor.Tensor attnOutput, Tensor.Tensor Q,
+        int numHeads, int seqLen, int vHeadDim, int qHeadDim, int dotDim, int passThroughDim)
+    {
+        var outputHeadDim = vHeadDim + passThroughDim;
+        var result = new float[numHeads * seqLen * outputHeadDim];
+
+        for (var h = 0; h < numHeads; h++)
+        {
+            for (var s = 0; s < seqLen; s++)
+            {
+                var attnSrc = h * seqLen * vHeadDim + s * vHeadDim;
+                var qSrc = h * seqLen * qHeadDim + s * qHeadDim + dotDim;
+                var dst = h * seqLen * outputHeadDim + s * outputHeadDim;
+
+                // Copy attention output (vHeadDim dimensions)
+                Array.Copy(attnOutput.Data, attnSrc, result, dst, vHeadDim);
+
+                // Copy Q pass-through (passThroughDim dimensions starting at dotDim)
+                Array.Copy(Q.Data, qSrc, result, dst + vHeadDim, passThroughDim);
+            }
+        }
+
+        return new Tensor.Tensor([numHeads, seqLen, outputHeadDim], result);
     }
 
     /// <summary>

@@ -137,6 +137,26 @@ public sealed class Gemma4ModelTests
     }
 
     [Fact]
+    public void Forward_WithKEqVAndGlobalHeadDim_ShouldProcessAllLayers()
+    {
+        // Reproduces the MatMul mismatch: full attention layers have Q sized
+        // for globalHeadDim but V shares K's smaller headDim. The Q
+        // pass-through mechanism bridges the gap for o_proj.
+        var (config, loader) = CreateTinyModel(
+            numLayers: 3,
+            headDim: 2,
+            globalHeadDim: 4,
+            layerTypes: ["sliding_attention", "full_attention", "sliding_attention"],
+            attentionKeyEqualsValue: true);
+        var model = new Gemma4Model(config, loader);
+
+        var logits = model.Forward([1, 2]);
+
+        Assert.Equal(config.VocabularySize, logits.Length);
+        Assert.Equal(3, model.Cache.LayerCount);
+    }
+
+    [Fact]
     public void Constructor_NullConfig_ShouldThrow()
     {
         var (_, loader) = CreateTinyModel();
@@ -243,12 +263,14 @@ public sealed class Gemma4ModelTests
                 CreateOnesData(hiddenSize));
 
             // Attention projections – Gemma-4 full-attention layers use
-            // global_head_dim for Q and V, but base head_dim for K (used only
-            // in the dot-product for attention scores). When attention_k_eq_v
-            // is true V shares K's weight (and therefore K's dimension).
+            // global_head_dim for Q while K uses base head_dim. V shares K's
+            // weight when attention_k_eq_v is true (otherwise V has its own
+            // projection, also at kLayerHeadDim for consistency).
+            // The o_proj always expects numQueryHeads * qLayerHeadDim because
+            // unused Q dimensions ("pass-through") are concatenated with the
+            // attention output to bridge any gap between V's dimension and Q's.
             var qLayerHeadDim = isFullAttention ? globalHeadDim : headDim;
             var kLayerHeadDim = headDim;
-            var vLayerHeadDim = attentionKeyEqualsValue ? kLayerHeadDim : qLayerHeadDim;
 
             tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * qLayerHeadDim, hiddenSize],
                 CreateRandomData(numQueryHeads * qLayerHeadDim * hiddenSize));
@@ -258,12 +280,12 @@ public sealed class Gemma4ModelTests
             // Only emit v_proj when K and V are not shared
             if (!attentionKeyEqualsValue)
             {
-                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * vLayerHeadDim, hiddenSize],
-                    CreateRandomData(numKvHeads * vLayerHeadDim * hiddenSize));
+                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * kLayerHeadDim, hiddenSize],
+                    CreateRandomData(numKvHeads * kLayerHeadDim * hiddenSize));
             }
 
-            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * vLayerHeadDim],
-                CreateRandomData(hiddenSize * numQueryHeads * vLayerHeadDim));
+            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * qLayerHeadDim],
+                CreateRandomData(hiddenSize * numQueryHeads * qLayerHeadDim));
 
             // FFN projections
             tensors[$"{prefix}.mlp.gate_proj.weight"] = ("F32", [intermediateSize, hiddenSize],
