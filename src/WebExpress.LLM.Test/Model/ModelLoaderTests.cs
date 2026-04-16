@@ -17,7 +17,13 @@ public sealed class ModelLoaderTests
             {
                 ModelName = "gemma-4-mini",
                 VocabularySize = 256000,
-                ContextLength = 8192
+                ContextLength = 8192,
+                HiddenSize = 2048,
+                IntermediateSize = 8192,
+                NumberOfLayers = 18,
+                NumberOfAttentionHeads = 8,
+                NumberOfKeyValueHeads = 1,
+                HeadDimension = 256
             };
 
             File.WriteAllText(
@@ -31,6 +37,8 @@ public sealed class ModelLoaderTests
             Assert.Equal("gemma-4-mini", model.Configuration.ModelName);
             Assert.Equal(256000, model.Configuration.VocabularySize);
             Assert.Equal(8192, model.Configuration.ContextLength);
+            Assert.Equal(2048, model.Configuration.HiddenSize);
+            Assert.Equal(18, model.Configuration.NumberOfLayers);
             Assert.Equal([1, 2, 3, 4], model.Weights);
         }
         finally
