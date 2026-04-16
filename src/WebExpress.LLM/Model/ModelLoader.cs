@@ -76,12 +76,18 @@ public sealed class ModelLoader
         var configurationJson = File.ReadAllText(configurationPath);
         var configuration = JsonSerializer.Deserialize<ModelConfiguration>(configurationJson);
 
-        return configuration is null
-            ? throw new InvalidDataException("Model configuration could not be deserialized.")
-            : new ModelDefinition
-            {
-                Configuration = configuration,
-                Weights = File.ReadAllBytes(weightsPath)
-            };
+        if (configuration is null)
+        {
+            throw new InvalidDataException("Model configuration could not be deserialized.");
+        }
+
+        // Load weights using ModelWeights class which supports files larger than 2GB
+        var weights = ModelWeights.FromFile(weightsPath);
+
+        return new ModelDefinition
+        {
+            Configuration = configuration,
+            Weights = weights
+        };
     }
 }

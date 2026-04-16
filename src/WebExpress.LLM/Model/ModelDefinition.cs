@@ -1,10 +1,14 @@
+using System;
+
 namespace WebExpress.LLM.Model;
 
 /// <summary>
 /// Provides a definition of a model, including its configuration and the associated weight data.
 /// </summary>
-public sealed class ModelDefinition
+public sealed class ModelDefinition : IDisposable
 {
+    private bool _disposed;
+
     /// <summary>
     /// Gets or sets the configuration for the model.
     /// </summary>
@@ -13,5 +17,19 @@ public sealed class ModelDefinition
     /// <summary>
     /// Gets the serialized weights used by the model.
     /// </summary>
-    public required byte[] Weights { get; init; }
+    public required ModelWeights Weights { get; init; }
+
+    /// <summary>
+    /// Disposes the ModelDefinition and releases associated resources.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        Weights?.Dispose();
+        _disposed = true;
+    }
 }

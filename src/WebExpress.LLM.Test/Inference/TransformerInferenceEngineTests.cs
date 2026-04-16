@@ -61,7 +61,7 @@ public sealed class TransformerInferenceEngineTests
                 NumberOfKeyValueHeads = 8,
                 HeadDimension = 32
             },
-            Weights = [1, 2, 3, 4]
+            Weights = ModelWeights.FromByteArray([1, 2, 3, 4])
         };
     }
 }
