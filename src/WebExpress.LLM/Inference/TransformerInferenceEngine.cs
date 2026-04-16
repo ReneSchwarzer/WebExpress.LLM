@@ -1,42 +1,39 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using WebExpress.LLM.Gemma;
 using WebExpress.LLM.Model;
+using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Inference;
 
 /// <summary>
-/// Implements a basic transformer-based inference engine for Gemma-4 model.
-/// This is a placeholder implementation that demonstrates the architecture structure
-/// without requiring actual model weights or GPU computation.
+/// Implements a transformer-based inference engine for the Gemma-4 model.
 /// </summary>
 /// <remarks>
-/// CURRENT STATE: This is a placeholder implementation that generates readable text-like output
-/// but does not perform actual transformer inference.
+/// When the model weights are in SafeTensors format, this engine performs a full
+/// Gemma-4 forward pass through:
+/// <list type="number">
+///   <item>Token embedding lookup with scaling</item>
+///   <item>35 transformer layers (multi-head attention, RMS normalization, gated FFN, residual connections)</item>
+///   <item>Final RMS normalization</item>
+///   <item>Linear projection to vocabulary logits</item>
+/// </list>
 ///
-/// TO INTEGRATE GEMMA-4 PROPERLY, THE FOLLOWING ARE REQUIRED:
-/// 1. Tensor Operations Library: NumSharp, TorchSharp, or similar for matrix operations
-/// 2. Weight Loading: Parse SafeTensors format and load model weights into memory
-/// 3. Embedding Layer: Token embeddings + positional embeddings (RoPE)
-/// 4. Transformer Layers (35 layers for Gemma-4):
-///    - Multi-head attention (sliding window and full attention patterns)
-///    - RMS normalization
-///    - Feed-forward networks with gated activations
-///    - Residual connections
-/// 5. Output Projection: Final linear layer to vocabulary logits
-/// 6. KV Cache: For efficient autoregressive generation
-/// 7. Memory Management: Handle large model weights efficiently
-/// 8. Optional: GPU acceleration via CUDA or similar
+/// When valid SafeTensors weights are not available, the engine falls back to a
+/// placeholder implementation that generates readable text-like output for testing
+/// purposes.
 ///
-/// The current implementation provides a framework for the inference flow and demonstrates
-/// async streaming token generation, but the ForwardPass method needs to be replaced with
-/// actual transformer computations.
+/// All tensor operations, memory handling, and mathematical primitives are implemented
+/// using native .NET functionality without external libraries.
 /// </remarks>
 public sealed class TransformerInferenceEngine : IInferenceEngine
 {
     private readonly ModelDefinition _model;
     private readonly ISamplingStrategy _samplingStrategy;
+    private readonly Gemma4Model _gemmaModel;
 
     /// <summary>
     /// Initializes a new instance of the TransformerInferenceEngine class with the specified model  
@@ -55,6 +52,11 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _samplingStrategy = samplingStrategy ?? throw new ArgumentNullException(nameof(samplingStrategy));
+
+        // Attempt to initialize the Gemma-4 model from SafeTensors weights.
+        // If the weights are not in SafeTensors format or are too small, fall back
+        // to the placeholder implementation.
+        _gemmaModel = TryCreateGemmaModel(model);
     }
 
     /// <summary>
@@ -83,6 +85,8 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
         {
             return Array.Empty<int>();
         }
+
+        _gemmaModel?.ResetCache();
 
         var generatedTokens = new List<int>();
         var contextTokens = new List<int>(promptTokens);
@@ -126,12 +130,14 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             yield break;
         }
 
+        _gemmaModel?.ResetCache();
+
         var contextTokens = new List<int>(promptTokens);
 
         for (var i = 0; i < maxNewTokens; i++)
         {
-            // Simulate async computation delay for realistic streaming behavior
-            await Task.Delay(10);
+            // Yield to allow the scheduler to process other work
+            await Task.Yield();
 
             var logits = ForwardPass(contextTokens);
             var nextToken = _samplingStrategy.Sample(logits);
@@ -148,24 +154,11 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
     }
 
     /// <summary>
-    /// Computes the logit values for the specified token array and returns them as an array of
-    /// floating‑point numbers.
+    /// Computes the logit values for the specified token sequence using either the full
+    /// Gemma-4 transformer model or a placeholder implementation.
     /// </summary>
-    /// <remarks>
-    /// This is a placeholder implementation that demonstrates the inference architecture.
-    /// A production implementation would:
-    /// 1. Load embeddings from model weights for input tokens
-    /// 2. Apply RoPE positional embeddings
-    /// 3. Process through transformer layers (attention + feed-forward)
-    /// 4. Apply final layer normalization
-    /// 5. Project to vocabulary logits
-    ///
-    /// For now, this generates logits that favor common English letters and spaces to produce
-    /// more readable placeholder output.
-    /// </remarks>
     /// <param name="tokens">
     /// A read‑only list of token IDs used as input for computing the logits.
-    /// May be empty.
     /// </param>
     /// <returns>
     /// An array of floating‑point numbers containing the computed logit values
@@ -173,42 +166,59 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
     /// </returns>
     private float[] ForwardPass(IReadOnlyList<int> tokens)
     {
+        // Use the real Gemma-4 model when available
+        if (_gemmaModel != null && tokens.Count > 0)
+        {
+            var tokenArray = new int[tokens.Count];
+
+            for (var i = 0; i < tokens.Count; i++)
+            {
+                tokenArray[i] = tokens[i];
+            }
+
+            return _gemmaModel.Forward(tokenArray);
+        }
+
+        // Fallback: placeholder implementation for testing and development
+        return PlaceholderForwardPass(tokens);
+    }
+
+    /// <summary>
+    /// Placeholder forward pass that generates logits biased toward readable English
+    /// characters. Used when real model weights are not available.
+    /// </summary>
+    private float[] PlaceholderForwardPass(IReadOnlyList<int> tokens)
+    {
         var vocabSize = _model.Configuration.VocabularySize;
         var logits = new float[vocabSize];
 
-        // Get a seed from the last token, or use 0 if no tokens
         var seed = tokens.Count > 0 ? tokens[^1] : 0;
 
-        // Generate logits with bias toward common English characters and spaces
-        // This produces more readable placeholder output than random characters
         for (var i = 0; i < vocabSize; i++)
         {
-            // Base logit value based on position and seed
             var baseValue = (float)((seed * 7 + i * 13) % 1000) / 1000.0f;
 
-            // Boost logits for common characters to make output more readable
-            // Space (32), lowercase letters (97-122), uppercase letters (65-90), period (46), comma (44)
-            if (i == 32)  // Space
+            if (i == 32)
             {
                 logits[i] = baseValue + 2.0f;
             }
-            else if (i >= 97 && i <= 122)  // Lowercase letters
+            else if (i >= 97 && i <= 122)
             {
                 logits[i] = baseValue + 1.5f;
             }
-            else if (i >= 65 && i <= 90)  // Uppercase letters
+            else if (i >= 65 && i <= 90)
             {
                 logits[i] = baseValue + 1.0f;
             }
-            else if (i == 46 || i == 44 || i == 33 || i == 63)  // . , ! ?
+            else if (i == 46 || i == 44 || i == 33 || i == 63)
             {
                 logits[i] = baseValue + 0.8f;
             }
-            else if (i >= 48 && i <= 57)  // Numbers
+            else if (i >= 48 && i <= 57)
             {
                 logits[i] = baseValue + 0.5f;
             }
-            else if (i == 10 || i == 13)  // Newline characters
+            else if (i == 10 || i == 13)
             {
                 logits[i] = baseValue + 0.3f;
             }
@@ -219,5 +229,41 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
         }
 
         return logits;
+    }
+
+    /// <summary>
+    /// Attempts to create a Gemma4Model from the model weights. Returns null if the
+    /// weights are not in SafeTensors format or cannot be parsed.
+    /// </summary>
+    private static Gemma4Model TryCreateGemmaModel(ModelDefinition model)
+    {
+        try
+        {
+            // SafeTensors requires at least 8 bytes for the header length
+            if (model.Weights.Length < 8)
+            {
+                return null;
+            }
+
+            var loader = new SafeTensorLoader(model.Weights);
+
+            // Verify that the weights contain the expected embedding tensor
+            if (!loader.ContainsTensor("model.embed_tokens.weight"))
+            {
+                return null;
+            }
+
+            return new Gemma4Model(model.Configuration, loader);
+        }
+        catch (Exception ex) when (
+            ex is InvalidDataException ||
+            ex is KeyNotFoundException ||
+            ex is ArgumentException ||
+            ex is FormatException ||
+            ex is System.Text.Json.JsonException)
+        {
+            // If weight parsing fails for known reasons, fall back to placeholder
+            return null;
+        }
     }
 }

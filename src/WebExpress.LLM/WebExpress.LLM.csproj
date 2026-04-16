@@ -25,6 +25,10 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="WebExpress.LLM.Test" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<None Include="..\..\icon.png" Link="icon.png">
 			<PackagePath>\</PackagePath>
 			<Pack>True</Pack>
