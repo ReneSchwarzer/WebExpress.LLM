@@ -1,6 +1,34 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <config version="1">
+	<!-- Model configuration: defines which model to load and where to find it -->
 	<model name="google/gemma-4-E2B-it">
 		<path>../../../../../model/google/gemma-4-E2B-it</path>
 	</model>
+
+	<!-- Inference configuration: controls text generation behavior -->
+	<inference>
+		<!-- Maximum number of new tokens to generate per response -->
+		<maxNewTokens>100</maxNewTokens>
+
+		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
+		<temperature>1.0</temperature>
+
+		<!-- Top-K sampling: sample from top K tokens (uncomment to enable) -->
+		<!-- <topK>50</topK> -->
+
+		<!-- Top-P (nucleus) sampling: sample from tokens with cumulative probability P (uncomment to enable) -->
+		<!-- <topP>0.9</topP> -->
+
+		<!-- Seed for deterministic random generation (uncomment to enable) -->
+		<!-- <seed>42</seed> -->
+	</inference>
+
+	<!-- Tokenizer configuration: defines how text is converted to tokens -->
+	<tokenizer type="byte" />
+
+	<!-- Runtime configuration: controls application behavior -->
+	<runtime>
+		<!-- Use deterministic inference engine for testing (true/false) -->
+		<useDeterministicEngine>false</useDeterministicEngine>
+	</runtime>
 </config>
