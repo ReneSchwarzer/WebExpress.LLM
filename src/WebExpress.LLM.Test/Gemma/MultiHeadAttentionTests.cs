@@ -128,6 +128,38 @@ public sealed class MultiHeadAttentionTests
     }
 
     [Fact]
+    public void Forward_WeightHeadDimLargerThanConfig_ShouldDeriveFromWeights()
+    {
+        // Simulates a mismatch where headDim in the config (2) is smaller
+        // than the actual projection weight dimension (4 per head).
+        // Before the fix this would throw an ArrayCopy out-of-bounds error.
+        var numQueryHeads = 2;
+        var numKvHeads = 1;
+        var actualHeadDim = 4;
+        var configHeadDim = 2; // intentionally wrong / smaller
+        var hiddenSize = 8;
+        var seqLen = 3;
+
+        var rope = new RotaryEmbedding(theta: 10000);
+        var attention = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, configHeadDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope);
+
+        var input = CreateInput(seqLen, hiddenSize);
+
+        // Weights use actualHeadDim, not configHeadDim
+        var qWeight = CreateWeight(numQueryHeads * actualHeadDim, hiddenSize);
+        var kWeight = CreateWeight(numKvHeads * actualHeadDim, hiddenSize);
+        var vWeight = CreateWeight(numKvHeads * actualHeadDim, hiddenSize);
+        var oWeight = CreateWeight(hiddenSize, numQueryHeads * actualHeadDim);
+
+        var result = attention.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        Assert.Equal(seqLen, result.Shape[0]);
+        Assert.Equal(hiddenSize, result.Shape[1]);
+    }
+
+    [Fact]
     public void Forward_NullRope_ShouldThrow()
     {
         Assert.Throws<ArgumentNullException>(() =>

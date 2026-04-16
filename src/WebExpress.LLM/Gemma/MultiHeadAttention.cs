@@ -74,10 +74,14 @@ public sealed class MultiHeadAttention
         var kProj = TensorOperations.MatMul(input, Transpose2D(kProjWeight));
         var vProj = TensorOperations.MatMul(input, Transpose2D(vProjWeight));
 
+        // Derive actual head dimensions from the projected tensor shapes
+        // to avoid mismatches between config values and real weight sizes.
+        var headDim = qProj.Shape[1] / _numQueryHeads;
+
         // Reshape to [numHeads, seqLen, headDim]
-        var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, _headDim);
-        var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, _headDim);
-        var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, _headDim);
+        var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, headDim);
+        var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, headDim);
+        var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, headDim);
 
         // Apply RoPE to Q and K
         var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
@@ -103,7 +107,7 @@ public sealed class MultiHeadAttention
 
         // Compute attention scores: Q @ K^T / sqrt(headDim)
         var kvSeqLen = K.Shape[1];
-        var scores = ComputeAttentionScores(Q, K, _numQueryHeads, seqLen, kvSeqLen, _headDim);
+        var scores = ComputeAttentionScores(Q, K, _numQueryHeads, seqLen, kvSeqLen, headDim);
 
         // Apply attention mask
         ApplyMask(scores, seqLen, kvSeqLen, startPosition);
@@ -112,10 +116,10 @@ public sealed class MultiHeadAttention
         scores = TensorOperations.Softmax(scores);
 
         // Attention output: scores @ V
-        var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, _headDim);
+        var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, headDim);
 
         // Reshape from [numQueryHeads, seqLen, headDim] -> [seqLen, numQueryHeads * headDim]
-        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, _headDim);
+        var concatenated = ReshapeFromHeads(attnOutput, _numQueryHeads, seqLen, headDim);
 
         // Output projection
         var output = TensorOperations.MatMul(concatenated, Transpose2D(oProjWeight));
@@ -135,6 +139,15 @@ public sealed class MultiHeadAttention
     private static Tensor.Tensor ReshapeToHeads(Tensor.Tensor input, int numHeads, int seqLen, int headDim)
     {
         var data = input.Data;
+        var expectedLength = seqLen * numHeads * headDim;
+
+        if (data.Length < expectedLength)
+        {
+            throw new ArgumentException(
+                $"Input tensor length {data.Length} is too small for the requested reshape " +
+                $"(seqLen={seqLen}, numHeads={numHeads}, headDim={headDim}, expected={expectedLength}).");
+        }
+
         var result = new float[numHeads * seqLen * headDim];
 
         for (var s = 0; s < seqLen; s++)
