@@ -120,6 +120,7 @@ public sealed class ModelConfiguration
     /// Gets the end-of-sequence token identifier (or the first value when the field is an array).
     /// </summary>
     [JsonPropertyName("eos_token_id")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int EosTokenId { get; init; }
 
     /// <summary>

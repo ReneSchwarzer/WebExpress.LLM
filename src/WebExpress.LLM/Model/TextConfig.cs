@@ -139,6 +139,7 @@ public sealed class TextConfig
     /// Gets the end-of-sequence token identifier.
     /// </summary>
     [JsonPropertyName("eos_token_id")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int EosTokenId { get; init; }
 
     /// <summary>
