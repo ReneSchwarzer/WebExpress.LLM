@@ -22,7 +22,10 @@ internal class Program
     /// Command-line arguments. The first argument, if provided, should be the path to the
     /// configuration file. If not provided, the default configuration file will be used.
     /// </param>
-    private static async Task Main(string[] args)
+    /// /// <returns>
+    /// Returns 0 on success; any value greater than 0 indicates an error.
+    /// </returns>
+    private static async Task<int> Main(string[] args)
     {
         // display welcome message to the user
         System.Console.WriteLine("WebExpress.LLM - Interactive Chat");
@@ -44,7 +47,7 @@ internal class Program
         {
             System.Console.WriteLine($"Error loading configuration: {ex.Message}");
             System.Console.WriteLine("Application cannot start without a valid configuration file.");
-            return;
+            return 1;
         }
 
         // initialize the tokenizer based on configuration
@@ -111,17 +114,16 @@ internal class Program
             {
                 // handle model loading errors gracefully
                 System.Console.WriteLine($"Error loading model: {ex.Message}");
-                System.Console.WriteLine("Falling back to deterministic inference engine.");
-                inferenceEngine = new DeterministicInferenceEngine();
+
+                return 2;
             }
         }
         else
         {
             // model path does not exist
             System.Console.WriteLine($"Model path does not exist: {config.ModelPath}");
-            System.Console.WriteLine("Falling back to deterministic inference engine.");
-            System.Console.WriteLine();
-            inferenceEngine = new DeterministicInferenceEngine();
+
+            return 3;
         }
 
         // store max tokens from configuration for use during chat
@@ -137,7 +139,7 @@ internal class Program
         while (true)
         {
             // prompt the user for input
-            System.Console.Write("You: ");
+            System.Console.Write(">");
             var userInput = System.Console.ReadLine();
 
             // check if the user wants to exit the application
@@ -175,9 +177,8 @@ internal class Program
         }
 
         // dispose model when application exits
-        if (model != null)
-        {
-            model.Dispose();
-        }
+        model?.Dispose();
+
+        return 0;
     }
 }
