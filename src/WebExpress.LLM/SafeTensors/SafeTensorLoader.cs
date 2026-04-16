@@ -1,0 +1,260 @@
+using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using WebExpress.LLM.Model;
+
+namespace WebExpress.LLM.SafeTensors;
+
+/// <summary>
+/// Parses the SafeTensors binary format and provides access to tensor metadata and data.
+/// </summary>
+/// <remarks>
+/// The SafeTensors format consists of:
+/// 1. An 8-byte little-endian header length
+/// 2. A JSON header describing tensor metadata (name, dtype, shape, data offsets)
+/// 3. Raw tensor data referenced by the metadata offsets
+///
+/// This parser works with <see cref="ModelWeights"/> to read data from either
+/// in-memory byte arrays or memory-mapped files.
+/// </remarks>
+public sealed class SafeTensorLoader
+{
+    private readonly ModelWeights _weights;
+    private readonly Dictionary<string, TensorMetadata> _metadata;
+    private readonly long _dataOffset;
+
+    /// <summary>
+    /// Initializes a new SafeTensorLoader by parsing the header from the provided model weights.
+    /// </summary>
+    /// <param name="weights">The model weights containing the SafeTensors data.</param>
+    /// <exception cref="ArgumentNullException">Thrown when weights is null.</exception>
+    /// <exception cref="InvalidDataException">Thrown when the SafeTensors header is malformed.</exception>
+    public SafeTensorLoader(ModelWeights weights)
+    {
+        _weights = weights ?? throw new ArgumentNullException(nameof(weights));
+        _metadata = new Dictionary<string, TensorMetadata>();
+
+        if (weights.Length < 8)
+        {
+            throw new InvalidDataException("SafeTensors file is too small to contain a valid header.");
+        }
+
+        // Read header length (8 bytes, little-endian)
+        var headerLengthBytes = weights.ReadBytes(0, 8);
+        var headerLength = BinaryPrimitives.ReadInt64LittleEndian(headerLengthBytes);
+
+        if (headerLength <= 0 || 8 + headerLength > weights.Length)
+        {
+            throw new InvalidDataException(
+                $"Invalid SafeTensors header length: {headerLength}.");
+        }
+
+        // Read and parse JSON header
+        var headerBytes = weights.ReadBytes(8, (int)headerLength);
+        var headerJson = Encoding.UTF8.GetString(headerBytes);
+
+        ParseHeader(headerJson);
+
+        _dataOffset = 8 + headerLength;
+    }
+
+    /// <summary>
+    /// Gets the names of all tensors in this SafeTensors file.
+    /// </summary>
+    public IReadOnlyCollection<string> TensorNames => _metadata.Keys;
+
+    /// <summary>
+    /// Gets the metadata for the specified tensor.
+    /// </summary>
+    /// <param name="name">The name of the tensor.</param>
+    /// <returns>The tensor metadata.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown when the tensor name is not found.</exception>
+    public TensorMetadata GetMetadata(string name)
+    {
+        if (!_metadata.TryGetValue(name, out var metadata))
+        {
+            throw new KeyNotFoundException($"Tensor '{name}' not found in SafeTensors file.");
+        }
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Checks whether a tensor with the given name exists.
+    /// </summary>
+    public bool ContainsTensor(string name)
+    {
+        return _metadata.ContainsKey(name);
+    }
+
+    /// <summary>
+    /// Loads a tensor as a float array, converting from the stored data type if necessary.
+    /// </summary>
+    /// <param name="name">The name of the tensor to load.</param>
+    /// <returns>A <see cref="Tensor.Tensor"/> containing the tensor data as float32.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown when the tensor name is not found.</exception>
+    public Tensor.Tensor LoadTensor(string name)
+    {
+        var meta = GetMetadata(name);
+        var begin = meta.DataOffsets[0];
+        var end = meta.DataOffsets[1];
+        var byteCount = (int)(end - begin);
+        var rawBytes = _weights.ReadBytes(_dataOffset + begin, byteCount);
+
+        var floats = ConvertToFloat32(rawBytes, meta.Dtype);
+
+        var shape = new int[meta.Shape.Count];
+
+        for (var i = 0; i < meta.Shape.Count; i++)
+        {
+            shape[i] = (int)meta.Shape[i];
+        }
+
+        return new Tensor.Tensor(shape, floats);
+    }
+
+    /// <summary>
+    /// Converts raw bytes to float32 array based on the specified data type.
+    /// </summary>
+    private static float[] ConvertToFloat32(byte[] rawBytes, string dtype)
+    {
+        return dtype switch
+        {
+            "F32" => ConvertF32(rawBytes),
+            "F16" => ConvertF16(rawBytes),
+            "BF16" => ConvertBF16(rawBytes),
+            _ => throw new NotSupportedException($"Conversion from {dtype} to float32 is not supported.")
+        };
+    }
+
+    private static float[] ConvertF32(byte[] bytes)
+    {
+        var count = bytes.Length / 4;
+        var result = new float[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            result[i] = BinaryPrimitives.ReadSingleLittleEndian(bytes.AsSpan(i * 4));
+        }
+
+        return result;
+    }
+
+    private static float[] ConvertF16(byte[] bytes)
+    {
+        var count = bytes.Length / 2;
+        var result = new float[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var halfBits = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(i * 2));
+            result[i] = HalfToFloat(halfBits);
+        }
+
+        return result;
+    }
+
+    private static float[] ConvertBF16(byte[] bytes)
+    {
+        var count = bytes.Length / 2;
+        var result = new float[count];
+
+        for (var i = 0; i < count; i++)
+        {
+            var bfBits = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(i * 2));
+            // BFloat16 is simply the upper 16 bits of a float32
+            var floatBits = (uint)bfBits << 16;
+            result[i] = BitConverter.Int32BitsToSingle((int)floatBits);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Converts IEEE 754 half-precision (16-bit) to single-precision (32-bit) float.
+    /// </summary>
+    private static float HalfToFloat(ushort halfBits)
+    {
+        var sign = (halfBits >> 15) & 0x1;
+        var exponent = (halfBits >> 10) & 0x1F;
+        var mantissa = halfBits & 0x3FF;
+
+        if (exponent == 0)
+        {
+            if (mantissa == 0)
+            {
+                // Zero
+                var zeroBits = (uint)(sign << 31);
+                return BitConverter.Int32BitsToSingle((int)zeroBits);
+            }
+
+            // Subnormal: normalize
+            while ((mantissa & 0x400) == 0)
+            {
+                mantissa <<= 1;
+                exponent--;
+            }
+
+            exponent++;
+            mantissa &= 0x3FF;
+        }
+        else if (exponent == 31)
+        {
+            // Inf or NaN
+            var specialBits = (uint)((sign << 31) | (0xFF << 23) | (mantissa << 13));
+            return BitConverter.Int32BitsToSingle((int)specialBits);
+        }
+
+        // Normal number
+        exponent = exponent + (127 - 15); // Rebias from half to single
+        var floatBits2 = (uint)((sign << 31) | (exponent << 23) | (mantissa << 13));
+
+        return BitConverter.Int32BitsToSingle((int)floatBits2);
+    }
+
+    private void ParseHeader(string headerJson)
+    {
+        using var doc = JsonDocument.Parse(headerJson);
+        var root = doc.RootElement;
+
+        foreach (var property in root.EnumerateObject())
+        {
+            // Skip the __metadata__ key
+            if (property.Name == "__metadata__")
+            {
+                continue;
+            }
+
+            var name = property.Name;
+            var tensor = property.Value;
+
+            var dtype = tensor.GetProperty("dtype").GetString() ?? "F32";
+
+            var shape = new List<long>();
+
+            foreach (var dim in tensor.GetProperty("shape").EnumerateArray())
+            {
+                shape.Add(dim.GetInt64());
+            }
+
+            var offsets = new List<long>();
+
+            foreach (var offset in tensor.GetProperty("data_offsets").EnumerateArray())
+            {
+                offsets.Add(offset.GetInt64());
+            }
+
+            _metadata[name] = new TensorMetadata
+            {
+                Name = name,
+                Dtype = dtype,
+                Shape = shape,
+                DataOffsets = offsets
+            };
+        }
+    }
+}
