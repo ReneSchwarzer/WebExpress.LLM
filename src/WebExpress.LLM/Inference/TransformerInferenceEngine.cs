@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 using WebExpress.LLM.Model;
 
 namespace WebExpress.LLM.Inference;
@@ -78,6 +80,49 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
         }
 
         return generatedTokens;
+    }
+
+    /// <summary>
+    /// Asynchronously generates tokens one at a time, yielding each token as it is produced.
+    /// This enables streaming token generation for real-time display in chat interfaces.
+    /// </summary>
+    /// <param name="promptTokens">The sequence of input tokens that serves as the initial context for generation. Cannot be null.</param>
+    /// <param name="maxNewTokens">The maximum number of new tokens to generate. Must be greater than or equal to zero.</param>
+    /// <returns>An async enumerable that yields generated tokens one at a time.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if maxNewTokens is less than zero.</exception>
+    public async IAsyncEnumerable<int> GenerateTokensAsync(IReadOnlyList<int> promptTokens, int maxNewTokens)
+    {
+        ArgumentNullException.ThrowIfNull(promptTokens);
+
+        if (maxNewTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxNewTokens), "Token count must be greater than or equal to zero.");
+        }
+
+        if (maxNewTokens == 0)
+        {
+            yield break;
+        }
+
+        var contextTokens = new List<int>(promptTokens);
+
+        for (var i = 0; i < maxNewTokens; i++)
+        {
+            // Simulate async computation delay for realistic streaming behavior
+            await Task.Delay(10);
+
+            var logits = ForwardPass(contextTokens);
+            var nextToken = _samplingStrategy.Sample(logits);
+
+            yield return nextToken;
+
+            contextTokens.Add(nextToken);
+
+            if (contextTokens.Count > _model.Configuration.ContextLength)
+            {
+                contextTokens.RemoveAt(0);
+            }
+        }
     }
 
     /// <summary>

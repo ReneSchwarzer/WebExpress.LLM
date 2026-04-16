@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Inference;
 
@@ -44,5 +45,36 @@ public sealed class DeterministicInferenceEngine : IInferenceEngine
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Asynchronously generates tokens one at a time, yielding each token as it is produced.
+    /// </summary>
+    /// <param name="promptTokens">The list of prompt tokens used as the basis for generating new tokens. Cannot be null.</param>
+    /// <param name="maxNewTokens">The maximum number of new tokens to generate. Must be greater than or equal to zero.</param>
+    /// <returns>An async enumerable that yields generated tokens one at a time.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if promptTokens is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if maxNewTokens is less than zero.</exception>
+    public async IAsyncEnumerable<int> GenerateTokensAsync(IReadOnlyList<int> promptTokens, int maxNewTokens)
+    {
+        ArgumentNullException.ThrowIfNull(promptTokens);
+
+        if (maxNewTokens < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxNewTokens), "Token count must be greater than or equal to zero.");
+        }
+
+        if (maxNewTokens == 0)
+        {
+            yield break;
+        }
+
+        var seed = promptTokens.Count == 0 ? 0 : promptTokens[^1] & 0xFF;
+
+        for (var i = 0; i < maxNewTokens; i++)
+        {
+            await Task.Delay(10);
+            yield return (seed + i + 1) % 256;
+        }
     }
 }
