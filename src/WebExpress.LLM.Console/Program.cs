@@ -18,9 +18,8 @@ internal class Program
     /// an interactive loop where the user can input messages and receive AI-generated responses.
     /// </summary>
     /// <param name="args">
-    /// Command-line arguments. The first argument, if provided, should be the path to the model directory
-    /// containing the configuration and weights files. If not provided, the application will use a
-    /// deterministic inference engine for demonstration purposes.
+    /// Command-line arguments. The first argument, if provided, should be the path to the
+    /// configuration file. If not provided, the default configuration file will be used.
     /// </param>
     private static void Main(string[] args)
     {
@@ -29,31 +28,82 @@ internal class Program
         System.Console.WriteLine("==================================");
         System.Console.WriteLine();
 
-        // initialize the tokenizer for converting text to/from token sequences
-        ITokenizer tokenizer = new ByteTokenizer();
+        // load application configuration from XML file
+        ApplicationConfiguration config;
+        var configPath = args.Length > 0 ? args[0] : null;
 
-        // initialize the inference engine based on whether a model path was provided
+        try
+        {
+            var configLoader = new ConfigurationLoader();
+            config = configLoader.Load(configPath);
+            System.Console.WriteLine($"Configuration loaded: {config.ModelName}");
+            System.Console.WriteLine();
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Error loading configuration: {ex.Message}");
+            System.Console.WriteLine("Application cannot start without a valid configuration file.");
+            return;
+        }
+
+        // initialize the tokenizer based on configuration
+        ITokenizer tokenizer = config.TokenizerType.ToLowerInvariant() switch
+        {
+            "byte" => new ByteTokenizer(),
+            _ => throw new InvalidOperationException($"Unsupported tokenizer type: {config.TokenizerType}")
+        };
+
+        // initialize the inference engine based on configuration
         IInferenceEngine inferenceEngine;
 
-        var modelPath = args.Length > 0 ? args[0] : "../../../../../model/google/gemma-4-E2B-it";
-
-        if (Directory.Exists(modelPath))
+        if (config.UseDeterministicEngine)
         {
-            // user provided a model directory path - load the actual model
-            System.Console.WriteLine($"Loading model from: {modelPath}");
+            // use deterministic inference engine for testing
+            System.Console.WriteLine("Using deterministic inference engine (testing mode).");
+            System.Console.WriteLine();
+            inferenceEngine = new DeterministicInferenceEngine();
+        }
+        else if (Directory.Exists(config.ModelPath))
+        {
+            // load the actual model from the configured path
+            System.Console.WriteLine($"Loading model from: {config.ModelPath}");
             System.Console.WriteLine();
 
             try
             {
                 // Load the model configuration and weights from the specified directory
                 var loader = new ModelLoader();
-                var model = loader.Load(modelPath);
+                var model = loader.Load(config.ModelPath);
 
-                // create a transformer inference engine with greedy sampling strategy
-                var samplingStrategy = new GreedySampling();
+                // create generation configuration from application settings
+                var generationConfig = new GenerationConfig
+                {
+                    MaxNewTokens = config.MaxNewTokens,
+                    Temperature = config.Temperature,
+                    TopK = config.TopK,
+                    TopP = config.TopP,
+                    Seed = config.Seed
+                };
+
+                // create sampling strategy based on generation configuration
+                var samplingStrategy = generationConfig.CreateSamplingStrategy();
                 inferenceEngine = new TransformerInferenceEngine(model, samplingStrategy);
 
                 System.Console.WriteLine("Model loaded successfully.");
+                System.Console.WriteLine($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
+                if (config.TopK.HasValue)
+                {
+                    System.Console.WriteLine($"  Sampling: Top-K (k={config.TopK.Value})");
+                }
+                else if (config.TopP.HasValue)
+                {
+                    System.Console.WriteLine($"  Sampling: Top-P (p={config.TopP.Value})");
+                }
+                else
+                {
+                    System.Console.WriteLine("  Sampling: Greedy");
+                }
+                System.Console.WriteLine();
             }
             catch (Exception ex)
             {
@@ -65,12 +115,15 @@ internal class Program
         }
         else
         {
-            // no model path provided - use deterministic inference engine for demonstration
-            System.Console.WriteLine("No model path provided. Using deterministic inference engine.");
-            System.Console.WriteLine("To use a real model, provide the model directory path as a command-line argument.");
+            // model path does not exist
+            System.Console.WriteLine($"Model path does not exist: {config.ModelPath}");
+            System.Console.WriteLine("Falling back to deterministic inference engine.");
             System.Console.WriteLine();
             inferenceEngine = new DeterministicInferenceEngine();
         }
+
+        // store max tokens from configuration for use during chat
+        var maxNewTokens = config.MaxNewTokens;
 
         // create a new chat session with the configured tokenizer and inference engine
         var chatSession = new ChatSession(tokenizer, inferenceEngine);
@@ -101,7 +154,7 @@ internal class Program
             try
             {
                 // send the user's message to the chat session and generate a response
-                var response = chatSession.Send(userInput, maxNewTokens: 100);
+                var response = chatSession.Send(userInput, maxNewTokens: maxNewTokens);
 
                 // display the assistant's response to the user
                 System.Console.WriteLine($"Assistant: {response.Content}");
