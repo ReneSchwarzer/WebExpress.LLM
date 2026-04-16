@@ -26,7 +26,7 @@ namespace WebExpress.LLM.Gemma;
 public sealed class Gemma4Model
 {
     private readonly ModelConfiguration _config;
-    private readonly SafeTensorLoader _loader;
+    private readonly ISafeTensorLoader _loader;
     private readonly KvCache _kvCache;
 
     /// <summary>
@@ -34,7 +34,7 @@ public sealed class Gemma4Model
     /// </summary>
     /// <param name="config">The model configuration.</param>
     /// <param name="loader">The SafeTensor loader providing access to model weights.</param>
-    public Gemma4Model(ModelConfiguration config, SafeTensorLoader loader)
+    public Gemma4Model(ModelConfiguration config, ISafeTensorLoader loader)
     {
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _loader = loader ?? throw new ArgumentNullException(nameof(loader));

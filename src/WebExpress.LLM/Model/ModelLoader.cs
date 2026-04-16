@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Model;
 
@@ -53,26 +54,6 @@ public sealed class ModelLoader
             throw new FileNotFoundException("Model configuration file was not found.", configurationPath);
         }
 
-        // Try to find weights file using supported file names
-        string weightsPath = null;
-        foreach (var weightsFileName in SupportedWeightFileNames)
-        {
-            var candidatePath = Path.Combine(modelDirectory, weightsFileName);
-            if (File.Exists(candidatePath))
-            {
-                weightsPath = candidatePath;
-                break;
-            }
-        }
-
-        if (weightsPath == null)
-        {
-            var supportedFormats = string.Join(", ", SupportedWeightFileNames);
-            throw new FileNotFoundException(
-                $"Model weights file was not found. Supported formats: {supportedFormats}",
-                Path.Combine(modelDirectory, "<weights-file>"));
-        }
-
         var configurationJson = File.ReadAllText(configurationPath);
         var configuration = JsonSerializer.Deserialize<ModelConfiguration>(configurationJson)
             ?? throw new InvalidDataException("Model configuration could not be deserialized.");
@@ -92,6 +73,34 @@ public sealed class ModelLoader
                 "Context length must be greater than zero.");
         }
 
+        // Check for sharded SafeTensors index file
+        var indexPath = Path.Combine(modelDirectory, SafeTensorIndex.DefaultFileName);
+
+        if (File.Exists(indexPath))
+        {
+            return LoadSharded(modelDirectory, configuration, indexPath);
+        }
+
+        // Try to find a single weights file using supported file names
+        string weightsPath = null;
+        foreach (var weightsFileName in SupportedWeightFileNames)
+        {
+            var candidatePath = Path.Combine(modelDirectory, weightsFileName);
+            if (File.Exists(candidatePath))
+            {
+                weightsPath = candidatePath;
+                break;
+            }
+        }
+
+        if (weightsPath == null)
+        {
+            var supportedFormats = string.Join(", ", SupportedWeightFileNames);
+            throw new FileNotFoundException(
+                $"Model weights file was not found. Supported formats: {supportedFormats}",
+                Path.Combine(modelDirectory, "<weights-file>"));
+        }
+
         // Load weights using ModelWeights class which supports files larger than 2GB
         var weights = ModelWeights.FromFile(weightsPath);
 
@@ -99,6 +108,21 @@ public sealed class ModelLoader
         {
             Configuration = configuration,
             Weights = weights
+        };
+    }
+
+    private static ModelDefinition LoadSharded(
+        string modelDirectory,
+        ModelConfiguration configuration,
+        string indexPath)
+    {
+        var index = SafeTensorIndex.FromFile(indexPath);
+        var shardedLoader = new ShardedSafeTensorLoader(index, modelDirectory);
+
+        return new ModelDefinition
+        {
+            Configuration = configuration,
+            ShardedLoader = shardedLoader
         };
     }
 }

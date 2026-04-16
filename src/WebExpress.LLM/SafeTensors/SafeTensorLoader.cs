@@ -21,7 +21,7 @@ namespace WebExpress.LLM.SafeTensors;
 /// This parser works with <see cref="ModelWeights"/> to read data from either
 /// in-memory byte arrays or memory-mapped files.
 /// </remarks>
-public sealed class SafeTensorLoader
+public sealed class SafeTensorLoader : ISafeTensorLoader
 {
     private readonly ModelWeights _weights;
     private readonly Dictionary<string, TensorMetadata> _metadata;

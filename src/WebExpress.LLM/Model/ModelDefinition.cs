@@ -1,4 +1,5 @@
 using System;
+using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Model;
 
@@ -16,8 +17,15 @@ public sealed class ModelDefinition : IDisposable
 
     /// <summary>
     /// Gets the serialized weights used by the model.
+    /// This is set for non-sharded models that use a single weights file, and null for sharded models.
     /// </summary>
-    public required ModelWeights Weights { get; init; }
+    public ModelWeights Weights { get; init; }
+
+    /// <summary>
+    /// Gets the sharded SafeTensor loader used by the model when weights are distributed
+    /// across multiple shard files. This is null for non-sharded models.
+    /// </summary>
+    public ShardedSafeTensorLoader ShardedLoader { get; init; }
 
     /// <summary>
     /// Disposes the ModelDefinition and releases associated resources.
@@ -30,6 +38,7 @@ public sealed class ModelDefinition : IDisposable
         }
 
         Weights?.Dispose();
+        ShardedLoader?.Dispose();
         _disposed = true;
     }
 }
