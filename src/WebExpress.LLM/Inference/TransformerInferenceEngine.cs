@@ -239,8 +239,19 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
     {
         try
         {
+            // If the model uses sharded weights, use the sharded loader directly
+            if (model.ShardedLoader != null)
+            {
+                if (!model.ShardedLoader.ContainsTensor("model.embed_tokens.weight"))
+                {
+                    return null;
+                }
+
+                return new Gemma4Model(model.Configuration, model.ShardedLoader);
+            }
+
             // SafeTensors requires at least 8 bytes for the header length
-            if (model.Weights.Length < 8)
+            if (model.Weights == null || model.Weights.Length < 8)
             {
                 return null;
             }

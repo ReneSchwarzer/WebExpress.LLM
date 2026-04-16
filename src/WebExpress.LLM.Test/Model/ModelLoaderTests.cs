@@ -1,6 +1,9 @@
+using System.Buffers.Binary;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using WebExpress.LLM.Model;
+using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Test.Model;
 
@@ -385,5 +388,274 @@ public sealed class ModelLoaderTests
         {
             Directory.Delete(tempPath, recursive: true);
         }
+    }
+
+    [Fact]
+    public void Load_ShouldDetectShardedWeightsFromIndexFile()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            WriteValidConfiguration(tempPath);
+
+            // Create shard files
+            var shard1 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
+            {
+                ["model.embed_tokens.weight"] = ("F32", [2, 2], [1f, 2, 3, 4])
+            });
+            File.WriteAllBytes(Path.Combine(tempPath, "model-00001-of-00002.safetensors"), shard1);
+
+            var shard2 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
+            {
+                ["model.norm.weight"] = ("F32", [2], [5f, 6])
+            });
+            File.WriteAllBytes(Path.Combine(tempPath, "model-00002-of-00002.safetensors"), shard2);
+
+            // Create index file
+            var indexJson = """
+            {
+                "metadata": {
+                    "total_parameters": 6,
+                    "total_size": 24
+                },
+                "weight_map": {
+                    "model.embed_tokens.weight": "model-00001-of-00002.safetensors",
+                    "model.norm.weight": "model-00002-of-00002.safetensors"
+                }
+            }
+            """;
+            File.WriteAllText(
+                Path.Combine(tempPath, SafeTensorIndex.DefaultFileName),
+                indexJson);
+
+            var loader = new ModelLoader();
+            var model = loader.Load(tempPath);
+
+            Assert.NotNull(model.ShardedLoader);
+            Assert.Null(model.Weights);
+            Assert.True(model.ShardedLoader.ContainsTensor("model.embed_tokens.weight"));
+            Assert.True(model.ShardedLoader.ContainsTensor("model.norm.weight"));
+            Assert.Equal(2, model.ShardedLoader.TensorNames.Count);
+
+            model.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ShardedWeights_ShouldLoadTensorsCorrectly()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            WriteValidConfiguration(tempPath);
+
+            var shard1 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
+            {
+                ["weight_a"] = ("F32", [3], [10f, 20, 30])
+            });
+            File.WriteAllBytes(Path.Combine(tempPath, "model-00001-of-00002.safetensors"), shard1);
+
+            var shard2 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
+            {
+                ["weight_b"] = ("F32", [2], [40f, 50])
+            });
+            File.WriteAllBytes(Path.Combine(tempPath, "model-00002-of-00002.safetensors"), shard2);
+
+            var indexJson = """
+            {
+                "metadata": {
+                    "total_parameters": 5,
+                    "total_size": 20
+                },
+                "weight_map": {
+                    "weight_a": "model-00001-of-00002.safetensors",
+                    "weight_b": "model-00002-of-00002.safetensors"
+                }
+            }
+            """;
+            File.WriteAllText(
+                Path.Combine(tempPath, SafeTensorIndex.DefaultFileName),
+                indexJson);
+
+            var loader = new ModelLoader();
+            var model = loader.Load(tempPath);
+
+            var tensorA = model.ShardedLoader.LoadTensor("weight_a");
+            Assert.Equal(new[] { 10f, 20f, 30f }, tensorA.Data);
+
+            var tensorB = model.ShardedLoader.LoadTensor("weight_b");
+            Assert.Equal(new[] { 40f, 50f }, tensorB.Data);
+
+            model.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ShouldPreferIndexFileOverSingleSafetensors()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            WriteValidConfiguration(tempPath);
+
+            // Create both a single safetensors file and sharded files with index
+            File.WriteAllBytes(Path.Combine(tempPath, "model.safetensors"), [1, 2, 3, 4, 5, 6, 7, 8]);
+
+            var shard1 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
+            {
+                ["tensor_from_shard"] = ("F32", [2], [100f, 200])
+            });
+            File.WriteAllBytes(Path.Combine(tempPath, "model-00001-of-00001.safetensors"), shard1);
+
+            var indexJson = """
+            {
+                "metadata": {},
+                "weight_map": {
+                    "tensor_from_shard": "model-00001-of-00001.safetensors"
+                }
+            }
+            """;
+            File.WriteAllText(
+                Path.Combine(tempPath, SafeTensorIndex.DefaultFileName),
+                indexJson);
+
+            var loader = new ModelLoader();
+            var model = loader.Load(tempPath);
+
+            // Sharded should be preferred when index file exists
+            Assert.NotNull(model.ShardedLoader);
+            Assert.Null(model.Weights);
+            Assert.True(model.ShardedLoader.ContainsTensor("tensor_from_shard"));
+
+            model.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Load_ShouldThrowWhenShardedIndexReferencesNonexistentShard()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            WriteValidConfiguration(tempPath);
+
+            var indexJson = """
+            {
+                "metadata": {},
+                "weight_map": {
+                    "tensor": "nonexistent-shard.safetensors"
+                }
+            }
+            """;
+            File.WriteAllText(
+                Path.Combine(tempPath, SafeTensorIndex.DefaultFileName),
+                indexJson);
+
+            var loader = new ModelLoader();
+            Assert.Throws<FileNotFoundException>(() => loader.Load(tempPath));
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Helpers for sharded test cases
+    // ---------------------------------------------------------------
+
+    private static void WriteValidConfiguration(string tempPath)
+    {
+        var configuration = new ModelConfiguration
+        {
+            ModelName = "test-model",
+            VocabularySize = 32000,
+            ContextLength = 2048,
+            HiddenSize = 512,
+            IntermediateSize = 2048,
+            NumberOfLayers = 6,
+            NumberOfAttentionHeads = 8,
+            NumberOfKeyValueHeads = 1,
+            HeadDimension = 64
+        };
+
+        File.WriteAllText(
+            Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
+            JsonSerializer.Serialize(configuration));
+    }
+
+    private static byte[] CreateSafeTensorsFile(
+        Dictionary<string, (string dtype, long[] shape, float[] data)> tensors)
+    {
+        var rawTensors = new Dictionary<string, (string dtype, long[] shape, byte[] data)>();
+
+        foreach (var (name, (dtype, shape, data)) in tensors)
+        {
+            var rawData = new byte[data.Length * 4];
+            for (var i = 0; i < data.Length; i++)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(rawData.AsSpan(i * 4), data[i]);
+            }
+            rawTensors[name] = (dtype, shape, rawData);
+        }
+
+        return CreateSafeTensorsFileRaw(rawTensors);
+    }
+
+    private static byte[] CreateSafeTensorsFileRaw(
+        Dictionary<string, (string dtype, long[] shape, byte[] data)> tensors)
+    {
+        var header = new Dictionary<string, object>();
+        long currentOffset = 0;
+
+        foreach (var (name, (dtype, shape, data)) in tensors)
+        {
+            var endOffset = currentOffset + data.Length;
+            header[name] = new
+            {
+                dtype,
+                shape,
+                data_offsets = new long[] { currentOffset, endOffset }
+            };
+            currentOffset = endOffset;
+        }
+
+        var headerJson = JsonSerializer.Serialize(header);
+        var headerBytes = Encoding.UTF8.GetBytes(headerJson);
+
+        var totalDataSize = tensors.Values.Sum(t => t.data.Length);
+        var result = new byte[8 + headerBytes.Length + totalDataSize];
+
+        BinaryPrimitives.WriteInt64LittleEndian(result, headerBytes.Length);
+        Array.Copy(headerBytes, 0, result, 8, headerBytes.Length);
+
+        var dataOffset = 8 + headerBytes.Length;
+        foreach (var (_, (_, _, data)) in tensors)
+        {
+            Array.Copy(data, 0, result, dataOffset, data.Length);
+            dataOffset += data.Length;
+        }
+
+        return result;
     }
 }
