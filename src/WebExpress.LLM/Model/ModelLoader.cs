@@ -81,6 +81,21 @@ public sealed class ModelLoader
             throw new InvalidDataException("Model configuration could not be deserialized.");
         }
 
+        // Validate critical configuration parameters
+        if (configuration.VocabularySize <= 0)
+        {
+            throw new InvalidDataException(
+                $"Model configuration has invalid vocabulary size: {configuration.VocabularySize}. " +
+                "Vocabulary size must be greater than zero.");
+        }
+
+        if (configuration.ContextLength <= 0)
+        {
+            throw new InvalidDataException(
+                $"Model configuration has invalid context length: {configuration.ContextLength}. " +
+                "Context length must be greater than zero.");
+        }
+
         // Load weights using ModelWeights class which supports files larger than 2GB
         var weights = ModelWeights.FromFile(weightsPath);
 
