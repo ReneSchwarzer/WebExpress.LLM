@@ -1,5 +1,4 @@
 using System;
-using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Gemma;
 
@@ -62,6 +61,26 @@ public sealed class RotaryEmbedding
         throw new ArgumentException("RoPE requires 2D [seqLen, headDim] or 3D [numHeads, seqLen, headDim] tensor.");
     }
 
+    /// <summary>
+    /// Applies a two‑dimensional rotation matrix to the specified dimensions of the input tensor,
+    /// computing the rotation for each position within the sequence range.
+    /// </summary>
+    /// <remarks>
+    /// The rotation is applied only to a subset of the dimensions, determined by an internal factor.
+    /// The remaining dimensions remain unchanged.  
+    /// The return value is a clone of the input tensor with the modified values.
+    /// </remarks>
+    /// <param name="input">
+    /// The input tensor to which the two‑dimensional rotation is applied.  
+    /// Must have at least two dimensions.
+    /// </param>
+    /// <param name="startPosition">
+    /// The starting position added to the positional index used for computing the rotation.  
+    /// Must be greater than or equal to zero.
+    /// </param>
+    /// <returns>
+    /// A new tensor containing the result of the applied two‑dimensional rotation for each position.
+    /// </returns>
     private Tensor.Tensor Apply2D(Tensor.Tensor input, int startPosition)
     {
         var seqLen = input.Shape[0];
@@ -95,6 +114,26 @@ public sealed class RotaryEmbedding
         return result;
     }
 
+    /// <summary>
+    /// Applies a rotary positional embedding transformation to a 3D tensor along the last dimension, starting from the
+    /// specified sequence position.
+    /// </summary>
+    /// <remarks>
+    /// Only the first portion of the last dimension, determined by the rotary factor, is modified.
+    /// The method clones the input tensor before applying the transformation, leaving the original tensor
+    /// unchanged.
+    /// </remarks>
+    /// <param name="input">
+    /// The input tensor to transform. Must be a 3-dimensional tensor with shape [numHeads, sequenceLength, headDim].
+    /// </param>
+    /// <param name="startPosition">
+    /// The starting position in the sequence from which to apply the rotary embedding. Must be greater than or equal to
+    /// zero.
+    /// </param>
+    /// <returns>
+    /// A new tensor with the rotary positional embedding applied to the specified dimensions. The shape matches the
+    /// input tensor.
+    /// </returns>
     private Tensor.Tensor Apply3D(Tensor.Tensor input, int startPosition)
     {
         var numHeads = input.Shape[0];

@@ -111,6 +111,24 @@ public sealed class ModelLoader
         };
     }
 
+    /// <summary>
+    /// Loads a model definition using sharded SafeTensor files and the specified configuration.
+    /// </summary>
+    /// <param name="modelDirectory">
+    /// The directory containing the model shard files.  
+    /// Must be a valid path to the model resources.
+    /// </param>
+    /// <param name="configuration">
+    /// The configuration settings to be used for the model.
+    /// </param>
+    /// <param name="indexPath">
+    /// The path to the index file that describes the model’s shard structure.  
+    /// Must not be null or empty.
+    /// </param>
+    /// <returns>
+    /// A ModelDefinition instance containing the loaded model configuration  
+    /// and the associated ShardedLoader.
+    /// </returns>
     private static ModelDefinition LoadSharded(
         string modelDirectory,
         ModelConfiguration configuration,

@@ -15,10 +15,6 @@ namespace WebExpress.LLM.Model;
 /// </remarks>
 public sealed class ModelConfiguration
 {
-    // -------------------------------------------------------------------------
-    // Backing fields for properties that fall back to TextConfig when absent
-    // -------------------------------------------------------------------------
-
     private readonly int _vocabularySize;
     private readonly int _contextLength;
     private readonly int _hiddenSize;
@@ -29,10 +25,6 @@ public sealed class ModelConfiguration
     private readonly float? _rmsNormEpsilon;
     private readonly float? _ropeTheta;
     private readonly int _headDimension;
-
-    // -------------------------------------------------------------------------
-    // Top-level identity / meta properties
-    // -------------------------------------------------------------------------
 
     /// <summary>
     /// Gets the name of the model.
@@ -75,10 +67,6 @@ public sealed class ModelConfiguration
     /// </summary>
     [JsonPropertyName("transformers_version")]
     public string TransformersVersion { get; init; } = string.Empty;
-
-    // -------------------------------------------------------------------------
-    // Multi-modal token identifiers
-    // -------------------------------------------------------------------------
 
     /// <summary>
     /// Gets the token identifier used to represent audio content.
@@ -141,10 +129,6 @@ public sealed class ModelConfiguration
     [JsonPropertyName("vision_soft_tokens_per_image")]
     public int VisionSoftTokensPerImage { get; init; }
 
-    // -------------------------------------------------------------------------
-    // Nested sub-model configurations
-    // -------------------------------------------------------------------------
-
     /// <summary>
     /// Gets the configuration for the text encoder component.
     /// </summary>
@@ -162,15 +146,6 @@ public sealed class ModelConfiguration
     /// </summary>
     [JsonPropertyName("vision_config")]
     public VisionConfig VisionConfig { get; init; }
-
-    // -------------------------------------------------------------------------
-    // Flat text-model properties with TextConfig fallback
-    //
-    // Each property reads from its backing field when the caller supplied an
-    // explicit value (> 0 / non-default), and falls back to the equivalent
-    // TextConfig property when the flat JSON field was absent (Gemma-4 nested
-    // format).
-    // -------------------------------------------------------------------------
 
     /// <summary>
     /// Gets the total number of unique tokens in the vocabulary.

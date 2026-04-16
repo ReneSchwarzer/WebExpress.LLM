@@ -2,7 +2,7 @@
 <config version="1">
 	<!-- Model configuration: defines which model to load and where to find it -->
 	<model name="google/gemma-4-E2B-it">
-		<path>../../../../../model/google/gemma-4-E2B-it</path>
+		<path>../../../../../model/google/gemma-4-26B-A4B-it</path>
 	</model>
 
 	<!-- Inference configuration: controls text generation behavior -->

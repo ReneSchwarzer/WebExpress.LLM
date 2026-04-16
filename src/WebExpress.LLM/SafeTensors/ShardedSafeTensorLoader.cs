@@ -159,6 +159,21 @@ public sealed class ShardedSafeTensorLoader : ISafeTensorLoader, IDisposable
         _disposed = true;
     }
 
+    /// <summary>
+    /// Retrieves the loader associated with the specified tensor name from the SafeTensors index.
+    /// </summary>
+    /// <param name="tensorName">
+    /// The name of the tensor for which to retrieve the corresponding shard loader. Cannot be null or empty.
+    /// </param>
+    /// <returns>
+    /// The loader instance responsible for loading the specified tensor's shard file.
+    /// </returns>
+    /// <exception cref="KeyNotFoundException">
+    /// Thrown if the specified tensor name does not exist in the SafeTensors index.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// Thrown if the shard file associated with the tensor name is not loaded.
+    /// </exception>
     private SafeTensorLoader GetShardLoader(string tensorName)
     {
         if (!_index.WeightMap.TryGetValue(tensorName, out var shardFile))

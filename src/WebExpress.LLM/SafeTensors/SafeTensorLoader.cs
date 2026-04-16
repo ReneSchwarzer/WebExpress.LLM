@@ -2,7 +2,6 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Text.Json;
 using WebExpress.LLM.Model;
@@ -131,6 +130,22 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         };
     }
 
+    /// <summary>
+    /// Converts a byte array containing 32-bit IEEE 754 floating-point values in little-endian format to an array of
+    /// single-precision floating-point numbers.
+    /// </summary>
+    /// <remarks>
+    /// The method interprets each consecutive group of 4 bytes as a single-precision floating-point
+    /// value using little-endian byte order. The caller is responsible for ensuring that the input array length is a
+    /// multiple of 4; otherwise, the last incomplete group of bytes will be ignored.
+    /// </remarks>
+    /// <param name="bytes">
+    /// The byte array to convert. The length must be a multiple of 4, with each group of 4 bytes representing a
+    /// single-precision floating-point value in little-endian format.
+    /// </param>
+    /// <returns>
+    /// An array of single-precision floating-point numbers converted from the input byte array.
+    /// </returns>
     private static float[] ConvertF32(byte[] bytes)
     {
         var count = bytes.Length / 4;
@@ -144,6 +159,21 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         return result;
     }
 
+    /// <summary>
+    /// Converts an array of bytes containing IEEE 754 half-precision (16-bit) floating-point values in little-endian
+    /// order to an array of single-precision (32-bit) floating-point values.
+    /// </summary>
+    /// <remarks>
+    /// The input array must have a length that is a multiple of 2, as each half-precision value
+    /// consists of 2 bytes. The conversion assumes the bytes are in little-endian order.
+    /// </remarks>
+    /// <param name="bytes">
+    /// The byte array containing half-precision floating-point values in little-endian format. The length must be an
+    /// even number.
+    /// </param>
+    /// <returns>
+    /// An array of single-precision floating-point values converted from the input half-precision values.
+    /// </returns>
     private static float[] ConvertF16(byte[] bytes)
     {
         var count = bytes.Length / 2;
@@ -158,6 +188,23 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         return result;
     }
 
+    /// <summary>
+    /// Converts a byte array containing BFloat16‑encoded values into an array of 32‑bit
+    /// floating‑point numbers (float).
+    /// </summary>
+    /// <remarks>
+    /// BFloat16 is a 16‑bit floating‑point format commonly used in machine‑learning applications.
+    /// Each BFloat16 value corresponds to the upper 16 bits of an IEEE 754 float.  
+    /// This method processes two bytes at a time and converts them into a single float value.
+    /// </remarks>
+    /// <param name="bytes">
+    /// The input byte array containing the BFloat16 values in little‑endian format.  
+    /// The length must be even, since each value consists of two bytes.
+    /// </param>
+    /// <returns>
+    /// An array of float values representing the converted BFloat16 numbers.  
+    /// The length of the returned array is half the length of the input.
+    /// </returns>
     private static float[] ConvertBF16(byte[] bytes)
     {
         var count = bytes.Length / 2;
@@ -219,6 +266,19 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         return BitConverter.Int32BitsToSingle((int)floatBits2);
     }
 
+    /// <summary>
+    /// Parses the metadata information from a JSON‑encoded header string and updates the internal
+    /// metadata structure for tensors.
+    /// </summary>
+    /// <remarks>
+    /// Properties named "__metadata__" are ignored.  
+    /// The method expects each tensor entry to contain the properties "dtype", "shape", and "data_offsets".  
+    /// Missing "dtype" properties are treated as "F32".
+    /// </remarks>
+    /// <param name="headerJson">
+    /// The JSON‑encoded string containing the header information for the tensors.  
+    /// It must be a valid JSON object with the expected properties.
+    /// </param>
     private void ParseHeader(string headerJson)
     {
         using var doc = JsonDocument.Parse(headerJson);
