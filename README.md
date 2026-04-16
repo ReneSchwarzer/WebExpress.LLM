@@ -24,8 +24,8 @@ The architecture is intentionally modular to enable extensions such as additiona
 ## Build and test
 
 ```bash
-dotnet build /home/runner/work/WebExpress.LLM/WebExpress.LLM/WebExpress.LLM.slnx
-dotnet test /home/runner/work/WebExpress.LLM/WebExpress.LLM/WebExpress.LLM.slnx
+dotnet build WebExpress.LLM.slnx
+dotnet test WebExpress.LLM.slnx
 ```
 
 ## Example usage
