@@ -170,12 +170,11 @@ public sealed class MultiHeadAttention
         // dimension matches o_proj.  This occurs in Gemma-4 full attention
         // layers when attention_k_eq_v is true (V = K, both use headDim)
         // while Q and o_proj use the larger globalHeadDim.
-        var dotDim = Math.Min(qHeadDim, kHeadDim);
-
         if (vHeadDim < outputHeadDim)
         {
+            var dotDim = Math.Min(qHeadDim, kHeadDim);
             var passThroughDim = outputHeadDim - vHeadDim;
-            attnOutput = ConcatQPassThrough(attnOutput, Q, _numQueryHeads, seqLen, vHeadDim, qHeadDim, dotDim, passThroughDim);
+            attnOutput = ConcatQPassThrough(attnOutput, Q, _numQueryHeads, seqLen, vHeadDim, dotDim, passThroughDim);
         }
 
         // Reshape from [numQueryHeads, seqLen, outputHeadDim] -> [seqLen, numQueryHeads * outputHeadDim]
@@ -252,9 +251,10 @@ public sealed class MultiHeadAttention
     /// </summary>
     private static Tensor.Tensor ConcatQPassThrough(
         Tensor.Tensor attnOutput, Tensor.Tensor Q,
-        int numHeads, int seqLen, int vHeadDim, int qHeadDim, int dotDim, int passThroughDim)
+        int numHeads, int seqLen, int vHeadDim, int dotDim, int passThroughDim)
     {
         var outputHeadDim = vHeadDim + passThroughDim;
+        var qHeadDim = Q.Shape[2];
         var result = new float[numHeads * seqLen * outputHeadDim];
 
         for (var h = 0; h < numHeads; h++)
