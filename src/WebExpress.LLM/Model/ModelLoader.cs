@@ -1,7 +1,13 @@
+using System;
+using System.IO;
 using System.Text.Json;
 
 namespace WebExpress.LLM.Model;
 
+/// <summary>
+/// Provides functionality to load a machine learning model definition from a specified directory containing
+/// configuration and weights files.
+/// </summary>
 public sealed class ModelLoader
 {
     public const string DefaultConfigurationFileName = "config.json";
@@ -30,15 +36,12 @@ public sealed class ModelLoader
         var configurationJson = File.ReadAllText(configurationPath);
         var configuration = JsonSerializer.Deserialize<ModelConfiguration>(configurationJson);
 
-        if (configuration is null)
-        {
-            throw new InvalidDataException("Model configuration could not be deserialized.");
-        }
-
-        return new ModelDefinition
-        {
-            Configuration = configuration,
-            Weights = File.ReadAllBytes(weightsPath)
-        };
+        return configuration is null
+            ? throw new InvalidDataException("Model configuration could not be deserialized.")
+            : new ModelDefinition
+            {
+                Configuration = configuration,
+                Weights = File.ReadAllBytes(weightsPath)
+            };
     }
 }

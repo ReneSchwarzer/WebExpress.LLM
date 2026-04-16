@@ -1,13 +1,22 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Chat;
 
+/// <summary>
+/// Represents a chat session that manages the exchange of messages between a user and an assistant, maintaining
+/// conversation history and generating assistant responses.
+/// </summary>
 public sealed class ChatSession
 {
     private readonly ITokenizer _tokenizer;
     private readonly IInferenceEngine _inferenceEngine;
-    private readonly List<ChatMessage> _messages = new();
+    private readonly List<ChatMessage> _messages = [];
+
+    public IReadOnlyList<ChatMessage> Messages => _messages;
 
     public ChatSession(ITokenizer tokenizer, IInferenceEngine inferenceEngine)
     {
@@ -15,8 +24,22 @@ public sealed class ChatSession
         _inferenceEngine = inferenceEngine ?? throw new ArgumentNullException(nameof(inferenceEngine));
     }
 
-    public IReadOnlyList<ChatMessage> Messages => _messages;
-
+    /// <summary>
+    /// Sends a user message to the chat and generates a response from the assistant.
+    /// </summary>
+    /// <param name="userMessage">
+    /// The message content to send as the user. Cannot be null, empty, or consist only of 
+    /// white-space characters.
+    /// </param>
+    /// <param name="maxNewTokens">
+    /// The maximum number of tokens to generate for the assistant's response. Must be a positive 
+    /// integer. The default is 32.</param>
+    /// <returns>
+    /// A ChatMessage representing the assistant's response to the user message.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if userMessage is null, empty, or consists only of white-space characters.
+    /// </exception>
     public ChatMessage Send(string userMessage, int maxNewTokens = 32)
     {
         if (string.IsNullOrWhiteSpace(userMessage))

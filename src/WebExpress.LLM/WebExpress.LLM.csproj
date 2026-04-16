@@ -1,9 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<Title>WebExpress.LLM</Title>
+		<Version>0.0.11.0</Version>
+		<AssemblyVersion>0.0.11.0</AssemblyVersion>
+		<TargetFramework>net10.0</TargetFramework>
+		<RuntimeIdentifiers>any</RuntimeIdentifiers>
+		<RepositoryUrl>https://github.com/webexpress-framework/WebExpress.WebIndex</RepositoryUrl>
+		<Authors>webexpress-framework@outlook.com</Authors>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<Company>webexpress-framework@outlook.com</Company>
+		<EnableDynamicLoading>true</EnableDynamicLoading>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Description>Provide a local inference framework for language model.</Description>
+		<PackageVersion>0.0.11-alpha</PackageVersion>
+		<PackageProjectUrl>https://github.com/webexpress-framework/WebExpress</PackageProjectUrl>
+		<PackageIcon>icon.png</PackageIcon>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<RepositoryType>git</RepositoryType>
+		<PackageTags>webexpress</PackageTags>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<IsPackable>true</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\..\icon.png" Link="icon.png">
+			<PackagePath>\</PackagePath>
+			<Pack>True</Pack>
+		</None>
+		<None Include="..\..\README.md" Link="README.md">
+			<PackagePath>\</PackagePath>
+			<Pack>True</Pack>
+		</None>
+	</ItemGroup>
 
 </Project>

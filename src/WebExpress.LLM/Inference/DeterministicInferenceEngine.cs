@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace WebExpress.LLM.Inference;
 
 public sealed class DeterministicInferenceEngine : IInferenceEngine

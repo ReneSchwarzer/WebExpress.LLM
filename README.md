@@ -1,3 +1,5 @@
+![WebExpress-Framework](https://raw.githubusercontent.com/webexpress-framework/.github/main/docs/assets/img/banner.png)
+
 # WebExpress.LLM
 
 WebExpress.LLM is a local inference framework for the Gemma 4 large language model, implemented in C# on .NET 10.

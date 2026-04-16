@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace WebExpress.LLM.Tokenization;
 
 public interface ITokenizer
