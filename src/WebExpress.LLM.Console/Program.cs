@@ -55,6 +55,7 @@ internal class Program
 
         // initialize the inference engine based on configuration
         IInferenceEngine inferenceEngine;
+        ModelDefinition model = null;
 
         if (config.UseDeterministicEngine)
         {
@@ -73,7 +74,7 @@ internal class Program
             {
                 // Load the model configuration and weights from the specified directory
                 var loader = new ModelLoader();
-                var model = loader.Load(config.ModelPath);
+                model = loader.Load(config.ModelPath);
 
                 // create generation configuration from application settings
                 var generationConfig = new GenerationConfig
@@ -166,6 +167,12 @@ internal class Program
                 System.Console.WriteLine($"Error: {ex.Message}");
                 System.Console.WriteLine();
             }
+        }
+
+        // dispose model when application exits
+        if (model != null)
+        {
+            model.Dispose();
         }
     }
 }

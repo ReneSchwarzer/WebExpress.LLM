@@ -39,7 +39,9 @@ public sealed class ModelLoaderTests
             Assert.Equal(8192, model.Configuration.ContextLength);
             Assert.Equal(2048, model.Configuration.HiddenSize);
             Assert.Equal(18, model.Configuration.NumberOfLayers);
-            Assert.Equal([1, 2, 3, 4], model.Weights);
+            Assert.Equal([1, 2, 3, 4], model.Weights.ToByteArray());
+
+            model.Dispose();
         }
         finally
         {
@@ -77,7 +79,9 @@ public sealed class ModelLoaderTests
             var model = loader.Load(tempPath);
 
             Assert.Equal("test-model", model.Configuration.ModelName);
-            Assert.Equal([5, 6, 7, 8], model.Weights);
+            Assert.Equal([5, 6, 7, 8], model.Weights.ToByteArray());
+
+            model.Dispose();
         }
         finally
         {
@@ -119,7 +123,9 @@ public sealed class ModelLoaderTests
             var model = loader.Load(tempPath);
 
             // Should load safetensors file (first in priority list)
-            Assert.Equal([1, 2, 3], model.Weights);
+            Assert.Equal([1, 2, 3], model.Weights.ToByteArray());
+
+            model.Dispose();
         }
         finally
         {
