@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace WebExpress.LLM.Inference;
 
@@ -9,6 +8,19 @@ namespace WebExpress.LLM.Inference;
 /// </summary>
 public sealed class GreedySampling : ISamplingStrategy
 {
+    /// <summary>
+    /// Finds the index of the highest value in the specified list of logits.
+    /// </summary>
+    /// <param name="logits">
+    /// The read‑only list of floating‑point numbers from which the index of the maximum value is determined.  
+    /// Must not be null or empty.
+    /// </param>
+    /// <returns>
+    /// The index of the highest value in <paramref name="logits"/>.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="logits"/> is empty.
+    /// </exception>
     public int Sample(IReadOnlyList<float> logits)
     {
         ArgumentNullException.ThrowIfNull(logits);

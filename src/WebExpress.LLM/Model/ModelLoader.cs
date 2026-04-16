@@ -13,6 +13,25 @@ public sealed class ModelLoader
     public const string DefaultConfigurationFileName = "config.json";
     public const string DefaultWeightsFileName = "model.weights";
 
+    /// <summary>
+    /// Loads a model definition from the specified directory, including its configuration and weights files.
+    /// </summary>
+    /// <param name="modelDirectory">
+    /// The path to the directory containing the model configuration and weights files. Cannot be null, empty, or
+    /// consist only of white-space characters.</param>
+    /// <returns>
+    /// A ModelDefinition instance containing the deserialized configuration and weights loaded from the specified
+    /// directory.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown if modelDirectory is null, empty, or consists only of white-space characters.
+    /// </exception>
+    /// <exception cref="FileNotFoundException">
+    /// Thrown if the required configuration or weights file does not exist in the specified directory.
+    /// </exception>
+    /// <exception cref="InvalidDataException">
+    /// Thrown if the model configuration file cannot be deserialized.
+    /// </exception>
     public ModelDefinition Load(string modelDirectory)
     {
         if (string.IsNullOrWhiteSpace(modelDirectory))

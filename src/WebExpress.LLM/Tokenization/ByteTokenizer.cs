@@ -11,7 +11,13 @@ namespace WebExpress.LLM.Tokenization;
 /// </summary>
 public sealed class ByteTokenizer : ITokenizer
 {
-
+    /// <summary>
+    /// Encodes the specified string as a read‑only list of integers, where each element represents  
+    /// the UTF‑8 byte of a character position.
+    /// </summary>
+    /// <param name="text">The string to encode. Must not be null.</param>
+    /// <returns>A read‑only list of integers containing the UTF‑8 encoded bytes of the input string.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="text"/> is null.</exception>
     public IReadOnlyList<int> Encode(string text)
     {
         return text is null

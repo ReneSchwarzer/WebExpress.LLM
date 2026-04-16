@@ -16,8 +16,26 @@ public sealed class ChatSession
     private readonly IInferenceEngine _inferenceEngine;
     private readonly List<ChatMessage> _messages = [];
 
+    /// <summary>
+    /// Gets the collection of chat messages in the conversation.
+    /// </summary>
     public IReadOnlyList<ChatMessage> Messages => _messages;
 
+    /// <summary>
+    /// Initializes a new instance of the ChatSession class with the specified tokenizer  
+    /// and inference engine.
+    /// </summary>
+    /// <param name="tokenizer">
+    /// The ITokenizer instance used to tokenize text input within the session.  
+    /// Must not be null.
+    /// </param>
+    /// <param name="inferenceEngine">
+    /// The IInferenceEngine instance used to process input and generate responses  
+    /// within the session. Must not be null.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="tokenizer"/> or <paramref name="inferenceEngine"/> is null.
+    /// </exception>
     public ChatSession(ITokenizer tokenizer, IInferenceEngine inferenceEngine)
     {
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));

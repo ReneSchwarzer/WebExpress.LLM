@@ -1,0 +1,6 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<config version="1">
+	<model name="google/gemma-4-E2B-it">
+		<path>../../../../../model/google/gemma-4-E2B-it</path>
+	</model>
+</config>
