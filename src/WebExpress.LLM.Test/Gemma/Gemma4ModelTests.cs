@@ -119,6 +119,24 @@ public sealed class Gemma4ModelTests
     }
 
     [Fact]
+    public void Forward_WithDifferentGlobalHeadDim_ShouldProcessAllLayers()
+    {
+        // Reproduces the original bug: sliding window layers use headDim=2 while
+        // full attention layers use globalHeadDim=4 with weights sized accordingly.
+        var (config, loader) = CreateTinyModel(
+            numLayers: 3,
+            headDim: 2,
+            globalHeadDim: 4,
+            layerTypes: ["sliding_attention", "full_attention", "sliding_attention"]);
+        var model = new Gemma4Model(config, loader);
+
+        var logits = model.Forward([1, 2]);
+
+        Assert.Equal(config.VocabularySize, logits.Length);
+        Assert.Equal(3, model.Cache.LayerCount);
+    }
+
+    [Fact]
     public void Constructor_NullConfig_ShouldThrow()
     {
         var (_, loader) = CreateTinyModel();
@@ -143,11 +161,13 @@ public sealed class Gemma4ModelTests
         int numQueryHeads = 2,
         int numKvHeads = 1,
         int headDim = 4,
+        int globalHeadDim = 0,
         bool tieWordEmbeddings = true,
         string[] layerTypes = null,
         bool attentionKeyEqualsValue = false)
     {
         layerTypes ??= Enumerable.Repeat("sliding_attention", numLayers).ToArray();
+        if (globalHeadDim <= 0) globalHeadDim = headDim;
 
         var config = new ModelConfiguration
         {
@@ -169,7 +189,7 @@ public sealed class Gemma4ModelTests
                 NumberOfAttentionHeads = numQueryHeads,
                 NumberOfKeyValueHeads = numKvHeads,
                 HeadDimension = headDim,
-                GlobalHeadDimension = headDim,
+                GlobalHeadDimension = globalHeadDim,
                 SlidingWindow = 4,
                 RmsNormEpsilon = 1e-6f,
                 LayerTypes = layerTypes,
@@ -214,6 +234,8 @@ public sealed class Gemma4ModelTests
         for (var layer = 0; layer < numLayers; layer++)
         {
             var prefix = $"model.language_model.layers.{layer}";
+            var isFullAttention = layer < layerTypes.Length && layerTypes[layer] == "full_attention";
+            var layerHeadDim = isFullAttention ? globalHeadDim : headDim;
 
             // Norm weights
             tensors[$"{prefix}.input_layernorm.weight"] = ("F32", [hiddenSize],
@@ -222,20 +244,20 @@ public sealed class Gemma4ModelTests
                 CreateOnesData(hiddenSize));
 
             // Attention projections
-            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * headDim, hiddenSize],
-                CreateRandomData(numQueryHeads * headDim * hiddenSize));
-            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * headDim, hiddenSize],
-                CreateRandomData(numKvHeads * headDim * hiddenSize));
+            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * layerHeadDim, hiddenSize],
+                CreateRandomData(numQueryHeads * layerHeadDim * hiddenSize));
+            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
+                CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
 
             // Only emit v_proj when K and V are not shared
             if (!attentionKeyEqualsValue)
             {
-                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * headDim, hiddenSize],
-                    CreateRandomData(numKvHeads * headDim * hiddenSize));
+                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
+                    CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
             }
 
-            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * headDim],
-                CreateRandomData(hiddenSize * numQueryHeads * headDim));
+            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * layerHeadDim],
+                CreateRandomData(hiddenSize * numQueryHeads * layerHeadDim));
 
             // FFN projections
             tensors[$"{prefix}.mlp.gate_proj.weight"] = ("F32", [intermediateSize, hiddenSize],
