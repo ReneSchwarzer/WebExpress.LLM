@@ -110,6 +110,9 @@ public sealed class Gemma4ModelTests
         var (config, loader) = CreateTinyModel(attentionKeyEqualsValue: true);
         var model = new Gemma4Model(config, loader);
 
+        // v_proj.weight should not exist when K and V share weights
+        Assert.False(loader.ContainsTensor("model.language_model.layers.0.self_attn.v_proj.weight"));
+
         var logits = model.Forward([1, 2]);
 
         Assert.Equal(config.VocabularySize, logits.Length);
