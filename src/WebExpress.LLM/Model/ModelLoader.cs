@@ -74,12 +74,8 @@ public sealed class ModelLoader
         }
 
         var configurationJson = File.ReadAllText(configurationPath);
-        var configuration = JsonSerializer.Deserialize<ModelConfiguration>(configurationJson);
-
-        if (configuration is null)
-        {
-            throw new InvalidDataException("Model configuration could not be deserialized.");
-        }
+        var configuration = JsonSerializer.Deserialize<ModelConfiguration>(configurationJson)
+            ?? throw new InvalidDataException("Model configuration could not be deserialized.");
 
         // Validate critical configuration parameters
         if (configuration.VocabularySize <= 0)

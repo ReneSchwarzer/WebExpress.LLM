@@ -10,7 +10,29 @@ namespace WebExpress.LLM.Model;
 /// </summary>
 internal sealed class IntOrArrayConverter : JsonConverter<int>
 {
-    /// <inheritdoc />
+    /// <summary>
+    /// Reads an integer value from the JSON input, accepting either a single integer or an array containing at least
+    /// one integer.
+    /// </summary>
+    /// <remarks>If the JSON input is an array, only the first integer element is returned; any additional
+    /// elements are ignored.</remarks>
+    /// <param name="reader">
+    /// The reader positioned at the JSON token to read. Must be at a number or the start of an array containing at
+    /// least one integer.
+    /// </param>
+    /// <param name="typeToConvert">
+    /// The type of the value to convert. This parameter is not used.
+    /// </param>
+    /// <param name="options">
+    /// Options to control the behavior of the deserialization. This parameter is not used.
+    /// </param>
+    /// <returns>
+    /// The integer value read from the JSON input. If the input is an array, returns the first integer element.
+    /// </returns>
+    /// <exception cref="JsonException">
+    /// Thrown if the JSON token is not a number or an array, if the array is empty, or if the first element of the
+    /// array is not an integer.
+    /// </exception>
     public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.Number)
@@ -43,7 +65,14 @@ internal sealed class IntOrArrayConverter : JsonConverter<int>
         throw new JsonException($"Unexpected token type {reader.TokenType} for an integer or integer-array value.");
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Writes the specified integer value as a JSON number using the provided Utf8JsonWriter.
+    /// </summary>
+    /// <param name="writer">The Utf8JsonWriter to which the integer value will be written. Must not be null.</param>
+    /// <param name="value">The integer value to write as a JSON number.</param>
+    /// <param name="options">
+    /// The serialization options to use when writing the value. This parameter can influence formatting and behavior.
+    /// </param>
     public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
     {
         writer.WriteNumberValue(value);

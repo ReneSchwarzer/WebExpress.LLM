@@ -18,6 +18,15 @@ public sealed class ModelWeights : IDisposable
     private readonly long _length;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the ModelWeights class with the specified model data.
+    /// </summary>
+    /// <param name="data">
+    /// The byte array containing the model data. Must not be null.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when <paramref name="data"/> is null.
+    /// </exception>
     private ModelWeights(byte[] data)
     {
         _smallData = data ?? throw new ArgumentNullException(nameof(data));
@@ -26,6 +35,23 @@ public sealed class ModelWeights : IDisposable
         _length = data.Length;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the ModelWeights class with the specified memory resources.
+    /// </summary>
+    /// <param name="memoryMappedFile">
+    /// The MemoryMappedFile object that provides the underlying memory mapping for the model weights.
+    /// Must not be null.
+    /// </param>
+    /// <param name="accessor">
+    /// The MemoryMappedViewAccessor used to access the data within the mapped memory.  
+    /// Must not be null.
+    /// </param>
+    /// <param name="length">
+    /// The length, in bytes, of the memory region reserved for the model weights.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown when either <paramref name="memoryMappedFile"/> or <paramref name="accessor"/> is null.
+    /// </exception>
     private ModelWeights(MemoryMappedFile memoryMappedFile, MemoryMappedViewAccessor accessor, long length)
     {
         _memoryMappedFile = memoryMappedFile ?? throw new ArgumentNullException(nameof(memoryMappedFile));
@@ -210,6 +236,12 @@ public sealed class ModelWeights : IDisposable
         _disposed = true;
     }
 
+    /// <summary>
+    /// Throws an exception if the current instance has been disposed.
+    /// </summary>
+    /// <remarks>Call this method before performing operations that require the instance to be valid. This
+    /// helps prevent accessing resources that have already been released.</remarks>
+    /// <exception cref="ObjectDisposedException">Thrown if the object has been disposed.</exception>
     private void ThrowIfDisposed()
     {
         if (_disposed)
