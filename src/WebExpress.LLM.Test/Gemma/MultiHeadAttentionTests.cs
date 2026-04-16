@@ -163,28 +163,28 @@ public sealed class MultiHeadAttentionTests
     public void Forward_AsymmetricQKvHeadDim_ShouldProduceCorrectOutputShape()
     {
         // Reproduces the original bug: Q uses a larger per-head dimension
-        // (globalHeadDim) than K/V (headDim). Before the fix this threw:
-        //   "Input tensor length ... is too small for the requested reshape"
+        // (globalHeadDim) than K (headDim). V uses globalHeadDim like Q,
+        // so scores @ V produces the right dimension for the output projection.
         var numQueryHeads = 2;
         var numKvHeads = 1;
-        var qHeadDim = 8;    // global_head_dim – larger
-        var kvHeadDim = 4;   // head_dim – smaller
+        var qHeadDim = 8;    // global_head_dim – larger (used by Q and V)
+        var kHeadDim = 4;    // head_dim – smaller (used by K only)
         var hiddenSize = 16;
         var seqLen = 3;
 
         var rope = new RotaryEmbedding(theta: 10000);
         var attention = new MultiHeadAttention(
-            numQueryHeads, numKvHeads, kvHeadDim,
+            numQueryHeads, numKvHeads, kHeadDim,
             isFullAttention: true, slidingWindowSize: 512, rope: rope);
 
         var input = CreateInput(seqLen, hiddenSize);
 
-        // Q projection uses qHeadDim, K/V projections use kvHeadDim
+        // Q and V projections use qHeadDim, K projection uses kHeadDim
         var qWeight = CreateWeight(numQueryHeads * qHeadDim, hiddenSize);
-        var kWeight = CreateWeight(numKvHeads * kvHeadDim, hiddenSize);
-        var vWeight = CreateWeight(numKvHeads * kvHeadDim, hiddenSize);
-        // Output projection matches attention output: numQueryHeads * kvHeadDim
-        var oWeight = CreateWeight(hiddenSize, numQueryHeads * kvHeadDim);
+        var kWeight = CreateWeight(numKvHeads * kHeadDim, hiddenSize);
+        var vWeight = CreateWeight(numKvHeads * qHeadDim, hiddenSize);
+        // Output projection matches attention output: numQueryHeads * vHeadDim
+        var oWeight = CreateWeight(hiddenSize, numQueryHeads * qHeadDim);
 
         var result = attention.Forward(input, qWeight, kWeight, vWeight, oWeight);
 
