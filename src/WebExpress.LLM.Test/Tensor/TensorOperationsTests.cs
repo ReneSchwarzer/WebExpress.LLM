@@ -340,4 +340,22 @@ public sealed class TensorOperationsTests
         var weight = WebExpress.LLM.Tensor.Tensor.FromArray([1f, 2, 3]);
         Assert.Throws<ArgumentException>(() => TensorOperations.EmbeddingLookup(weight, [0]));
     }
+
+    [Fact]
+    public void EmbeddingLookup_TokenIdOutOfRange_ShouldThrow()
+    {
+        // Embedding matrix: 4 tokens, 3 dims each
+        var embed = new WebExpress.LLM.Tensor.Tensor([4, 3], new float[12]);
+
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => TensorOperations.EmbeddingLookup(embed, [4]));
+        Assert.Contains("4", ex.Message);
+    }
+
+    [Fact]
+    public void EmbeddingLookup_NegativeTokenId_ShouldThrow()
+    {
+        var embed = new WebExpress.LLM.Tensor.Tensor([4, 3], new float[12]);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => TensorOperations.EmbeddingLookup(embed, [-1]));
+    }
 }

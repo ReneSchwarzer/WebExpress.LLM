@@ -186,6 +186,12 @@ public sealed class Tensor
             throw new InvalidOperationException("GetRow requires at least a 2D tensor.");
         }
 
+        if (index < 0 || index >= _shape[0])
+        {
+            throw new ArgumentOutOfRangeException(nameof(index),
+                $"Index {index} is out of range for first dimension of size {_shape[0]}.");
+        }
+
         var innerSize = 1;
 
         for (var i = 1; i < _shape.Length; i++)
