@@ -127,7 +127,7 @@ public sealed class SafeTensorIndex
                 if (string.IsNullOrEmpty(shardFile))
                 {
                     throw new InvalidDataException(
-                        $"Tensor '{property.Name}' has a null or empty shard filename in the weight map.");
+                        $"Tensor \"{property.Name}\" in weight_map has a null or empty shard filename.");
                 }
 
                 weightMap[property.Name] = shardFile;

@@ -122,7 +122,6 @@ public sealed class ModelLoader
         return new ModelDefinition
         {
             Configuration = configuration,
-            Weights = null,
             ShardedLoader = shardedLoader
         };
     }
