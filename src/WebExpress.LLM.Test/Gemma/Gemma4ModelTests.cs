@@ -105,6 +105,17 @@ public sealed class Gemma4ModelTests
     }
 
     [Fact]
+    public void Forward_WithAttentionKeyEqualsValue_ShouldShareKVWeight()
+    {
+        var (config, loader) = CreateTinyModel(attentionKeyEqualsValue: true);
+        var model = new Gemma4Model(config, loader);
+
+        var logits = model.Forward([1, 2]);
+
+        Assert.Equal(config.VocabularySize, logits.Length);
+    }
+
+    [Fact]
     public void Constructor_NullConfig_ShouldThrow()
     {
         var (_, loader) = CreateTinyModel();
@@ -130,7 +141,8 @@ public sealed class Gemma4ModelTests
         int numKvHeads = 1,
         int headDim = 4,
         bool tieWordEmbeddings = true,
-        string[] layerTypes = null)
+        string[] layerTypes = null,
+        bool attentionKeyEqualsValue = false)
     {
         layerTypes ??= Enumerable.Repeat("sliding_attention", numLayers).ToArray();
 
@@ -158,6 +170,7 @@ public sealed class Gemma4ModelTests
                 SlidingWindow = 4,
                 RmsNormEpsilon = 1e-6f,
                 LayerTypes = layerTypes,
+                AttentionKeyEqualsValue = attentionKeyEqualsValue,
                 RopeParameters = new TextRopeParameters
                 {
                     SlidingAttention = new RopeEntry
@@ -197,7 +210,7 @@ public sealed class Gemma4ModelTests
         // Per-layer weights
         for (var layer = 0; layer < numLayers; layer++)
         {
-            var prefix = $"model.layers.{layer}";
+            var prefix = $"model.language_model.layers.{layer}";
 
             // Norm weights
             tensors[$"{prefix}.input_layernorm.weight"] = ("F32", [hiddenSize],
@@ -210,8 +223,14 @@ public sealed class Gemma4ModelTests
                 CreateRandomData(numQueryHeads * headDim * hiddenSize));
             tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * headDim, hiddenSize],
                 CreateRandomData(numKvHeads * headDim * hiddenSize));
-            tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * headDim, hiddenSize],
-                CreateRandomData(numKvHeads * headDim * hiddenSize));
+
+            // Only emit v_proj when K and V are not shared
+            if (!attentionKeyEqualsValue)
+            {
+                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * headDim, hiddenSize],
+                    CreateRandomData(numKvHeads * headDim * hiddenSize));
+            }
+
             tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * headDim],
                 CreateRandomData(hiddenSize * numQueryHeads * headDim));
 
