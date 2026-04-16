@@ -33,7 +33,8 @@ bld/
 [Oo]ut/
 [Ll]og/
 [Ll]ogs/
-[Mm]odel/
+# Model weight files (not Model source code directories)
+/model/
 
 # Build results on 'Bin' directories
 **/[Bb]in/*
