@@ -81,9 +81,12 @@ public sealed class TokenizerConfiguration
 
     /// <summary>
     /// Gets the maximum model input length in tokens.
+    /// HuggingFace configs sometimes store this as a very large floating-point value (e.g. 1e30)
+    /// to indicate "unlimited"; such values are clamped to <see cref="long.MaxValue"/>.
     /// </summary>
     [JsonPropertyName("model_max_length")]
-    public int ModelMaxLength { get; init; }
+    [JsonConverter(typeof(LongFromNumberConverter))]
+    public long ModelMaxLength { get; init; }
 
     /// <summary>
     /// Gets a value indicating whether the tokenizer adds a BOS token during encoding.
@@ -169,5 +172,51 @@ public sealed class TokenizerConfiguration
 
         return JsonSerializer.Deserialize<TokenizerConfiguration>(json, options)
             ?? throw new InvalidDataException("Tokenizer configuration could not be deserialized.");
+    }
+}
+
+/// <summary>
+/// A <see cref="JsonConverter{T}"/> for <see cref="long"/> that safely reads JSON numbers
+/// stored as floating-point values (e.g. <c>1e30</c> or <c>1000000000000000019884624838656</c>).
+/// Values outside the <see cref="long"/> range are clamped to <see cref="long.MaxValue"/>
+/// or <see cref="long.MinValue"/> respectively.
+/// </summary>
+internal sealed class LongFromNumberConverter : JsonConverter<long>
+{
+    /// <inheritdoc/>
+    public override long Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            // Try integer first to preserve exact values for normal token limits (e.g. 4096, 32768).
+            if (reader.TryGetInt64(out var intValue))
+            {
+                return intValue;
+            }
+
+            // Fall back to double for large floating-point numbers (e.g. 1e30 for "unlimited").
+            if (reader.TryGetDouble(out var doubleValue))
+            {
+                if (doubleValue >= (double)long.MaxValue)
+                {
+                    return long.MaxValue;
+                }
+
+                if (doubleValue <= (double)long.MinValue)
+                {
+                    return long.MinValue;
+                }
+
+                return (long)doubleValue;
+            }
+        }
+
+        throw new JsonException($"Cannot convert token '{reader.TokenType}' to {nameof(Int64)}.");
+    }
+
+    /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, long value, JsonSerializerOptions options)
+    {
+        writer.WriteNumberValue(value);
     }
 }

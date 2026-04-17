@@ -116,4 +116,26 @@ public sealed class TokenizerConfigurationTests
             File.Delete(tempFile);
         }
     }
+
+    [Fact]
+    public void FromJson_WithLargeFloatModelMaxLength_ShouldClampToLongMaxValue()
+    {
+        // HuggingFace tokenizer_config.json files often set model_max_length to a huge float
+        // (1e30 / 1000000000000000019884624838656) to indicate "unlimited context".
+        var json = """{ "model_max_length": 1000000000000000019884624838656 }""";
+
+        var config = TokenizerConfiguration.FromJson(json);
+
+        Assert.Equal(long.MaxValue, config.ModelMaxLength);
+    }
+
+    [Fact]
+    public void FromJson_WithExponentialModelMaxLength_ShouldClampToLongMaxValue()
+    {
+        var json = """{ "model_max_length": 1e30 }""";
+
+        var config = TokenizerConfiguration.FromJson(json);
+
+        Assert.Equal(long.MaxValue, config.ModelMaxLength);
+    }
 }
