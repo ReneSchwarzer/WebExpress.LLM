@@ -51,9 +51,9 @@ public sealed class ApplicationConfiguration
     /// <summary>
     /// Gets the path to the SentencePiece .model file, relative to the model directory.
     /// Only used when <see cref="TokenizerType"/> is "sentencepiece".
-    /// Defaults to "tokenizer.model" when not specified.
+    /// Defaults to "tokenizer.json" when not specified.
     /// </summary>
-    public string TokenizerModelPath { get; init; } = "tokenizer.model";
+    public string TokenizerModelPath { get; init; } = "tokenizer.json";
 
     /// <summary>
     /// Gets a value indicating whether to use deterministic inference engine for testing.
