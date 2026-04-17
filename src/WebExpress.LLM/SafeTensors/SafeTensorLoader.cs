@@ -25,7 +25,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     private readonly ModelWeights _weights;
     private readonly Dictionary<string, TensorMetadata> _metadata;
     private readonly long _dataOffset;
-    private readonly long _baseOffset;
+    private long _baseOffset;
 
     /// <summary>
     /// Initializes a new SafeTensorLoader by parsing the header from the provided model weights.
@@ -67,6 +67,23 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     /// Gets the names of all tensors in this SafeTensors file.
     /// </summary>
     public IReadOnlyCollection<string> TensorNames => _metadata.Keys;
+
+    /// <summary>
+    /// Gets the size of the data section in bytes (file length minus header).
+    /// </summary>
+    internal long DataSectionSize => _weights.Length - _dataOffset;
+
+    /// <summary>
+    /// Overrides the automatically computed base offset.
+    /// Used by <see cref="ShardedSafeTensorLoader"/> to set a shard-specific base offset
+    /// computed from only the tensors that the index maps to this shard, rather than
+    /// from all tensors in the header (which may include tensors from other shards).
+    /// </summary>
+    /// <param name="baseOffset">The base offset to subtract from tensor data offsets.</param>
+    internal void SetBaseOffset(long baseOffset)
+    {
+        _baseOffset = baseOffset;
+    }
 
     /// <summary>
     /// Gets the metadata for the specified tensor.
