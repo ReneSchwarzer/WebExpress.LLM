@@ -2,36 +2,34 @@
 
 # WebExpress.LLM
 
-WebExpress.LLM is a local inference framework for the Gemma 4 large language model, implemented in C# on .NET 10.
-It provides modular building blocks to run basic chat-style inference entirely on the local machine without external services,
-REST APIs, or HTTP endpoints.
+WebExpress.LLM is a high-performance local inference framework for the Gemma-4 large language model, implemented in pure C# on .NET 10.
+It provides modular building blocks to run full transformer-based inference entirely on the local machine without external services,
+heavy dependencies (like TorchSharp/PyTorch), or cloud APIs.
 
 ## Repository structure
 
-- `/src/WebExpress.LLM` – core framework library
-- `/src/WebExpress.LLM.Console` – interactive console application
-- `/src/WebExpress.LLM.Test` – xUnit test project
+- `/src/WebExpress.LLM` – core framework library (transformer, tensors, tokenizers)
+- `/src/WebExpress.LLM.Console` – interactive streaming console application
+- `/src/WebExpress.LLM.Test` – comprehensive xUnit test suite
+- `/docs` – architecture and integration documentation
 - `/WebExpress.LLM.slnx` – solution file
 
 ## Included framework components
 
-The framework currently includes:
-
 ### Core Components
-- **Model Loading**: Support for loading Gemma-4 model configuration and weight files
+- **Full Gemma-4 Architecture**: Complete implementation of multi-head attention (GQA/Sliding Window), RMS normalization, and gated FFN.
+- **Native Tensor Library**: Optimized C# tensor implementation with efficient memory management via `Span<float>`.
+- **Model Loading**: Support for single-file and sharded SafeTensors models with memory-mapping for large weights (>2GB).
 - **Tokenization**:
-  - `ByteTokenizer`: Simple UTF-8 byte-level tokenizer
-  - `VocabularyTokenizer`: Vocabulary-based tokenization foundation
+  - `GemmaTokenizer`: BPE-based tokenizer specifically for Gemma-4.
+  - `SentencePieceTokenizer`: Support for SentencePiece-based model vocabularies.
+  - `ByteTokenizer`: UTF-8 byte-level fallback tokenizer.
 - **Inference Engines**:
-  - `DeterministicInferenceEngine`: Deterministic mock for testing
-  - `TransformerInferenceEngine`: Basic transformer architecture implementation
-- **Sampling Strategies**:
-  - `GreedySampling`: Deterministic token selection
-  - `TopKSampling`: Sample from top-k tokens
-  - `TopPSampling`: Nucleus sampling
-- **Chat Session**: Conversation state management and orchestration
-
-The architecture is intentionally modular to enable extensions such as additional sampling strategies, caching layers, or alternative inference backends.
+  - `TransformerInferenceEngine`: High-performance engine utilizing the full Gemma-4 transformer architecture.
+  - `DeterministicInferenceEngine`: Reproducible mock for testing and development.
+- **Sampling Strategies**: Greedy, Top-K, and Nucleus (Top-P) sampling.
+- **KV Cache**: Efficient state management for high-speed autoregressive generation.
+- **Chat Session**: Conversation history tracking and async streaming orchestration.
 
 ## Build and test
 
@@ -42,15 +40,15 @@ dotnet test src/WebExpress.LLM.slnx
 
 ## Running the console application
 
-The `WebExpress.LLM.Console` project provides an interactive chat interface for conversing with the language model. The application uses an XML configuration file located at `config/webexpress.llm.config.xml` that defines all runtime parameters including model paths, inference settings, and tokenizer options.
+The `WebExpress.LLM.Console` project provides an interactive chat interface with real-time token streaming. It uses an XML configuration file located at `config/webexpress.llm.config.xml`.
 
 ### Configuration file
 
-The configuration file (`config/webexpress.llm.config.xml`) contains:
-- **Model settings**: Model name and path to the model directory
-- **Inference settings**: MaxNewTokens, Temperature, TopK/TopP sampling, and optional Seed
-- **Tokenizer settings**: Type of tokenizer to use (currently "byte")
-- **Runtime settings**: Option to use deterministic inference engine for testing
+The configuration supports:
+- **Model settings**: Name and absolute/relative path to the model directory.
+- **Inference settings**: MaxNewTokens, Temperature, TopK, TopP, and Seed.
+- **Tokenizer settings**: Type of tokenizer (e.g., "gemma", "byte").
+- **Runtime settings**: Toggle between real transformer and deterministic engine.
 
 ### Basic usage
 
@@ -59,104 +57,37 @@ cd src/WebExpress.LLM.Console
 dotnet run
 ```
 
-The application will automatically load settings from the default configuration file. By default, it will attempt to load the model specified in the configuration file. If the model path does not exist, it will fall back to the deterministic inference engine.
-
-### Using a custom configuration file
-
-```bash
-cd src/WebExpress.LLM.Console
-dotnet run -- /path/to/custom/config.xml
-```
-
-### Configuration example
-
-The configuration file supports the following settings:
-
-```xml
-<?xml version="1.0" encoding="utf-8" ?>
-<config version="1">
-  <model name="google/gemma-4-E2B-it">
-    <path>../../../../../model/google/gemma-4-E2B-it</path>
-  </model>
-
-  <inference>
-    <maxNewTokens>100</maxNewTokens>
-    <temperature>1.0</temperature>
-    <!-- Optional: <topK>50</topK> -->
-    <!-- Optional: <topP>0.9</topP> -->
-    <!-- Optional: <seed>42</seed> -->
-  </inference>
-
-  <tokenizer type="byte" />
-
-  <runtime>
-    <useDeterministicEngine>false</useDeterministicEngine>
-  </runtime>
-</config>
-```
-
-The model directory must contain:
-- `config.json` – model configuration file
-- `model.weights` – model weights file
-
-### Interactive commands
-
-Once the console application is running:
-- Type your messages and press Enter to receive responses from the assistant
-- Type `exit` or `quit` to end the session
+The application will attempt to load the configured model. If weights are missing or incompatible, it falls back to a placeholder mode that generates readable English text.
 
 ## Example usage
 
-### Basic Chat Session
+### Async Streaming Chat
 ```csharp
 using WebExpress.LLM.Chat;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
 
-var tokenizer = new ByteTokenizer();
-var engine = new DeterministicInferenceEngine();
+var tokenizer = new GemmaTokenizer(vocab, merges);
+var engine = new TransformerInferenceEngine(model, new TopPSampling(0.9f));
 var chat = new ChatSession(tokenizer, engine);
 
-var assistant = chat.Send("Hello local Gemma", maxNewTokens: 16);
-Console.WriteLine(assistant.Content);
-```
-
-### Using Transformer Engine with Sampling Strategies
-```csharp
-using WebExpress.LLM.Inference;
-using WebExpress.LLM.Model;
-using WebExpress.LLM.Tokenization;
-
-// Load model
-var loader = new ModelLoader();
-var model = loader.Load("/path/to/model");
-
-// Create inference engine with greedy sampling
-var greedySampling = new GreedySampling();
-var engine = new TransformerInferenceEngine(model, greedySampling);
-
-// Or use top-k sampling
-var topKSampling = new TopKSampling(k: 50, seed: 42);
-var engineWithTopK = new TransformerInferenceEngine(model, topKSampling);
-
-// Or use nucleus (top-p) sampling
-var topPSampling = new TopPSampling(p: 0.9f, seed: 42);
-var engineWithTopP = new TransformerInferenceEngine(model, topPSampling);
-```
-
-### Using Generation Configuration
-```csharp
-using WebExpress.LLM.Inference;
-
-// Create generation config with top-k sampling
-var config = new GenerationConfig
+await foreach (var chunk in chat.SendAsync("What is quantum computing?"))
 {
-    MaxNewTokens = 100,
-    Temperature = 0.8f,
-    TopK = 50,
-    Seed = 42
-};
-
-var sampler = config.CreateSamplingStrategy();
-var engine = new TransformerInferenceEngine(model, sampler);
+    Console.Write(chunk);
+}
 ```
+
+### Manual Tensor Operations
+```csharp
+using WebExpress.LLM.Tensor;
+
+var a = new Tensor([2, 2], [1f, 2f, 3f, 4f]);
+var b = new Tensor([2, 2], [5f, 6f, 7f, 8f]);
+var result = TensorOperations.MatMul(a, b);
+```
+
+## Documentation
+
+For more detailed information, see:
+- [Gemma-4 Integration Guide](docs/GEMMA4_INTEGRATION.md)
+- [Implementation Summary](docs/IMPLEMENTATION_SUMMARY.md)
