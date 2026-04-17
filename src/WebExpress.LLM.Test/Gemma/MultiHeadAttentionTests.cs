@@ -160,6 +160,40 @@ public sealed class MultiHeadAttentionTests
     }
 
     [Fact]
+    public void Forward_AsymmetricQKvHeadDim_ShouldProduceCorrectOutputShape()
+    {
+        // Reproduces the original bug: Q uses a larger per-head dimension
+        // (globalHeadDim) than K (headDim). V uses kHeadDim (same as K)
+        // to simulate the attention_k_eq_v case. The Q pass-through
+        // mechanism bridges the gap so o_proj gets the expected dimension.
+        var numQueryHeads = 2;
+        var numKvHeads = 1;
+        var qHeadDim = 8;    // global_head_dim – larger (used by Q)
+        var kHeadDim = 4;    // head_dim – smaller (used by K and V)
+        var hiddenSize = 16;
+        var seqLen = 3;
+
+        var rope = new RotaryEmbedding(theta: 10000);
+        var attention = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, kHeadDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope);
+
+        var input = CreateInput(seqLen, hiddenSize);
+
+        // Q projection uses qHeadDim; K and V projections use kHeadDim
+        var qWeight = CreateWeight(numQueryHeads * qHeadDim, hiddenSize);
+        var kWeight = CreateWeight(numKvHeads * kHeadDim, hiddenSize);
+        var vWeight = CreateWeight(numKvHeads * kHeadDim, hiddenSize);
+        // Output projection expects numQueryHeads * qHeadDim (pass-through fills the gap)
+        var oWeight = CreateWeight(hiddenSize, numQueryHeads * qHeadDim);
+
+        var result = attention.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        Assert.Equal(seqLen, result.Shape[0]);
+        Assert.Equal(hiddenSize, result.Shape[1]);
+    }
+
+    [Fact]
     public void Forward_NullRope_ShouldThrow()
     {
         Assert.Throws<ArgumentNullException>(() =>

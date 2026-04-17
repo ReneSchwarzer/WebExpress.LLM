@@ -403,13 +403,13 @@ public sealed class ModelLoaderTests
             // Create shard files
             var shard1 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
             {
-                ["model.embed_tokens.weight"] = ("F32", [2, 2], [1f, 2, 3, 4])
+                ["model.language_model.embed_tokens.weight"] = ("F32", [2, 2], [1f, 2, 3, 4])
             });
             File.WriteAllBytes(Path.Combine(tempPath, "model-00001-of-00002.safetensors"), shard1);
 
             var shard2 = CreateSafeTensorsFile(new Dictionary<string, (string dtype, long[] shape, float[] data)>
             {
-                ["model.norm.weight"] = ("F32", [2], [5f, 6])
+                ["model.language_model.norm.weight"] = ("F32", [2], [5f, 6])
             });
             File.WriteAllBytes(Path.Combine(tempPath, "model-00002-of-00002.safetensors"), shard2);
 
@@ -421,8 +421,8 @@ public sealed class ModelLoaderTests
                     "total_size": 24
                 },
                 "weight_map": {
-                    "model.embed_tokens.weight": "model-00001-of-00002.safetensors",
-                    "model.norm.weight": "model-00002-of-00002.safetensors"
+                    "model.language_model.embed_tokens.weight": "model-00001-of-00002.safetensors",
+                    "model.language_model.norm.weight": "model-00002-of-00002.safetensors"
                 }
             }
             """;
@@ -435,8 +435,8 @@ public sealed class ModelLoaderTests
 
             Assert.NotNull(model.ShardedLoader);
             Assert.Null(model.Weights);
-            Assert.True(model.ShardedLoader.ContainsTensor("model.embed_tokens.weight"));
-            Assert.True(model.ShardedLoader.ContainsTensor("model.norm.weight"));
+            Assert.True(model.ShardedLoader.ContainsTensor("model.language_model.embed_tokens.weight"));
+            Assert.True(model.ShardedLoader.ContainsTensor("model.language_model.norm.weight"));
             Assert.Equal(2, model.ShardedLoader.TensorNames.Count);
 
             model.Dispose();
@@ -502,6 +502,10 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the model loader prefers loading from sharded safetensors files using an index file over a single
+    /// safetensors file when both are present in the model directory.
+    /// </summary>
     [Fact]
     public void Load_ShouldPreferIndexFileOverSingleSafetensors()
     {
@@ -549,6 +553,10 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the Load method throws a FileNotFoundException when a sharded index references a shard file that
+    /// does not exist.
+    /// </summary>
     [Fact]
     public void Load_ShouldThrowWhenShardedIndexReferencesNonexistentShard()
     {

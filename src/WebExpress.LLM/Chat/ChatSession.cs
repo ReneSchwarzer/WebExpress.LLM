@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
 
@@ -117,7 +116,7 @@ public sealed class ChatSession
         await foreach (var token in _inferenceEngine.GenerateTokensAsync(promptTokens, maxNewTokens))
         {
             responseTokens.Add(token);
-            var decodedText = _tokenizer.Decode(new[] { token });
+            var decodedText = _tokenizer.Decode([token]);
             responseBuilder.Append(decodedText);
             yield return decodedText;
         }

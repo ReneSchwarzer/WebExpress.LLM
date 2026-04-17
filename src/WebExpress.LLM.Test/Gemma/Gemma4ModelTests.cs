@@ -7,8 +7,16 @@ using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Test.Gemma;
 
+/// <summary>
+/// Provides a collection of component tests for the Gemma4Model class in order to validate
+/// its public behavior and various configuration scenarios.
+/// </summary>
 public sealed class Gemma4ModelTests
 {
+    /// <summary>
+    /// Verifies that the Forward method of the Gemma4Model returns a logits array whose length matches the configured
+    /// vocabulary size.
+    /// </summary>
     [Fact]
     public void Forward_ShouldProduceLogitsOfVocabSize()
     {
@@ -20,6 +28,10 @@ public sealed class Gemma4ModelTests
         Assert.Equal(config.VocabularySize, logits.Length);
     }
 
+    /// <summary>
+    /// Verifies that the Forward method of the Gemma4Model class produces deterministic outputs for the same input
+    /// after resetting the model's cache.
+    /// </summary>
     [Fact]
     public void Forward_ShouldBeDeterministic()
     {
@@ -37,6 +49,9 @@ public sealed class Gemma4ModelTests
         }
     }
 
+    /// <summary>
+    /// Verifies that the Forward method throws an ArgumentException when called with an empty token array.
+    /// </summary>
     [Fact]
     public void Forward_EmptyTokens_ShouldThrow()
     {
@@ -46,6 +61,9 @@ public sealed class Gemma4ModelTests
         Assert.Throws<ArgumentException>(() => model.Forward(Array.Empty<int>()));
     }
 
+    /// <summary>
+    /// Verifies that the Forward method throws an ArgumentNullException when called with a null tokens argument.
+    /// </summary>
     [Fact]
     public void Forward_NullTokens_ShouldThrow()
     {
@@ -55,6 +73,9 @@ public sealed class Gemma4ModelTests
         Assert.Throws<ArgumentNullException>(() => model.Forward(null));
     }
 
+    /// <summary>
+    /// Verifies that calling ResetCache fully clears the model’s internal key/value cache (KV cache).
+    /// </summary>
     [Fact]
     public void ResetCache_ShouldClearKvCache()
     {
@@ -68,6 +89,10 @@ public sealed class Gemma4ModelTests
         Assert.Equal(0, model.Cache.LayerCount);
     }
 
+    /// <summary>
+    /// Verifies that the Forward method of the Gemma4Model returns logits with a length equal to the configured
+    /// vocabulary size when provided with a single token input.
+    /// </summary>
     [Fact]
     public void Forward_SingleToken_ShouldWork()
     {
@@ -79,6 +104,9 @@ public sealed class Gemma4ModelTests
         Assert.Equal(config.VocabularySize, logits.Length);
     }
 
+    /// <summary>
+    /// Verifies that the model uses the embedding weights for the output layer when embeddings are tied.
+    /// </summary>
     [Fact]
     public void Forward_WithTiedEmbeddings_ShouldUseEmbedWeightForOutput()
     {
@@ -91,6 +119,10 @@ public sealed class Gemma4ModelTests
         Assert.Equal(config.VocabularySize, logits.Length);
     }
 
+    /// <summary>
+    /// Verifies that the Forward method correctly processes and caches all model layers
+    /// when using a combination of sliding‑attention and full‑attention layers.
+    /// </summary>
     [Fact]
     public void Forward_WithSlidingAndFullAttention_ShouldProcessAllLayers()
     {
@@ -104,6 +136,10 @@ public sealed class Gemma4ModelTests
         Assert.Equal(4, model.Cache.LayerCount);
     }
 
+    /// <summary>
+    /// Verifies that the model shares key and value projection weights when the attention configuration specifies that
+    /// the key equals the value.
+    /// </summary>
     [Fact]
     public void Forward_WithAttentionKeyEqualsValue_ShouldShareKVWeight()
     {
@@ -118,6 +154,10 @@ public sealed class Gemma4ModelTests
         Assert.Equal(config.VocabularySize, logits.Length);
     }
 
+    /// <summary>
+    /// Verifies that the model's Forward method correctly processes all layers when sliding window and full attention
+    /// layers use different head dimensions.
+    /// </summary>
     [Fact]
     public void Forward_WithDifferentGlobalHeadDim_ShouldProcessAllLayers()
     {
@@ -136,6 +176,34 @@ public sealed class Gemma4ModelTests
         Assert.Equal(3, model.Cache.LayerCount);
     }
 
+    /// <summary>
+    /// Verifies that the model's Forward method correctly processes all layers when the key and value dimensions are
+    /// equal and the global head dimension is larger, ensuring compatibility across mixed attention layer types.
+    /// </summary>
+    [Fact]
+    public void Forward_WithKEqVAndGlobalHeadDim_ShouldProcessAllLayers()
+    {
+        // Reproduces the MatMul mismatch: full attention layers have Q sized
+        // for globalHeadDim but V shares K's smaller headDim. The Q
+        // pass-through mechanism bridges the gap for o_proj.
+        var (config, loader) = CreateTinyModel(
+            numLayers: 3,
+            headDim: 2,
+            globalHeadDim: 4,
+            layerTypes: ["sliding_attention", "full_attention", "sliding_attention"],
+            attentionKeyEqualsValue: true);
+        var model = new Gemma4Model(config, loader);
+
+        var logits = model.Forward([1, 2]);
+
+        Assert.Equal(config.VocabularySize, logits.Length);
+        Assert.Equal(3, model.Cache.LayerCount);
+    }
+
+    /// <summary>
+    /// Verifies that the Gemma4Model constructor throws an ArgumentNullException
+    /// when the configuration object is null.
+    /// </summary>
     [Fact]
     public void Constructor_NullConfig_ShouldThrow()
     {
@@ -150,9 +218,56 @@ public sealed class Gemma4ModelTests
         Assert.Throws<ArgumentNullException>(() => new Gemma4Model(config, null));
     }
 
-    // ---------------------------------------------------------------
-    // Helper: Creates a minimal model configuration and SafeTensorLoader
-    // ---------------------------------------------------------------
+    /// <summary>
+    /// Creates a minimal model configuration and an associated SafeTensorLoader with randomly
+    /// initialized weight data for testing or development purposes.
+    /// </summary>
+    /// <remarks>
+    /// This method is intended for tests, development, or quickly creating small models.
+    /// The weight data is generated randomly and is not suitable for production use.
+    /// </remarks>
+    /// <param name="vocabSize">
+    /// The size of the vocabulary used by the model. Must be positive.
+    /// </param>
+    /// <param name="hiddenSize">
+    /// The number of hidden units in each layer of the model. Must be positive.
+    /// </param>
+    /// <param name="intermediateSize">
+    /// The size of the intermediate layer in each layer’s feedforward network. Must be positive.
+    /// </param>
+    /// <param name="numLayers">
+    /// The number of layers in the model. Must be positive.
+    /// </param>
+    /// <param name="numQueryHeads">
+    /// The number of query heads in the attention layer. Must be positive.
+    /// </param>
+    /// <param name="numKvHeads">
+    /// The number of key/value heads in the attention layer. Must be positive.
+    /// </param>
+    /// <param name="headDim">
+    /// The dimension of each attention head. Must be positive.
+    /// </param>
+    /// <param name="globalHeadDim">
+    /// The dimension of the global attention heads for full-attention layers.
+    /// If less than or equal to 0, the value of <paramref name="headDim"/> is used.
+    /// </param>
+    /// <param name="tieWordEmbeddings">
+    /// Indicates whether the word embeddings should be shared with the output head.
+    /// Use <see langword="true"/> to share the embeddings; otherwise <see langword="false"/>.
+    /// </param>
+    /// <param name="layerTypes">
+    /// An array specifying the type of each layer (e.g., "sliding_attention" or "full_attention").
+    /// If null, all layers are set to "sliding_attention".
+    /// </param>
+    /// <param name="attentionKeyEqualsValue">
+    /// Indicates whether the key and value projections in the attention layer are identical.
+    /// Use <see langword="true"/> to share the projections; otherwise <see langword="false"/>.
+    /// </param>
+    /// <returns>
+    /// A tuple containing the created model configuration and a SafeTensorLoader with the initialized
+    /// weight data.
+    /// </returns>
+
     private static (ModelConfiguration config, SafeTensorLoader loader) CreateTinyModel(
         int vocabSize = 16,
         int hiddenSize = 8,
@@ -220,7 +335,7 @@ public sealed class Gemma4ModelTests
             CreateRandomData(vocabSize * hiddenSize));
 
         // Final norm
-        tensors["model.norm.weight"] = ("F32", [hiddenSize],
+        tensors["model.language_model.norm.weight"] = ("F32", [hiddenSize],
             CreateOnesData(hiddenSize));
 
         // Output head (only needed if not tied)
@@ -235,7 +350,6 @@ public sealed class Gemma4ModelTests
         {
             var prefix = $"model.language_model.layers.{layer}";
             var isFullAttention = layer < layerTypes.Length && layerTypes[layer] == "full_attention";
-            var layerHeadDim = isFullAttention ? globalHeadDim : headDim;
 
             // Norm weights
             tensors[$"{prefix}.input_layernorm.weight"] = ("F32", [hiddenSize],
@@ -243,21 +357,30 @@ public sealed class Gemma4ModelTests
             tensors[$"{prefix}.post_attention_layernorm.weight"] = ("F32", [hiddenSize],
                 CreateOnesData(hiddenSize));
 
-            // Attention projections
-            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * layerHeadDim, hiddenSize],
-                CreateRandomData(numQueryHeads * layerHeadDim * hiddenSize));
-            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
-                CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
+            // Attention projections – Gemma-4 full-attention layers use
+            // global_head_dim for Q while K uses base head_dim. V shares K's
+            // weight when attention_k_eq_v is true (otherwise V has its own
+            // projection, also at kLayerHeadDim for consistency).
+            // The o_proj always expects numQueryHeads * qLayerHeadDim because
+            // unused Q dimensions ("pass-through") are concatenated with the
+            // attention output to bridge any gap between V's dimension and Q's.
+            var qLayerHeadDim = isFullAttention ? globalHeadDim : headDim;
+            var kLayerHeadDim = headDim;
+
+            tensors[$"{prefix}.self_attn.q_proj.weight"] = ("F32", [numQueryHeads * qLayerHeadDim, hiddenSize],
+                CreateRandomData(numQueryHeads * qLayerHeadDim * hiddenSize));
+            tensors[$"{prefix}.self_attn.k_proj.weight"] = ("F32", [numKvHeads * kLayerHeadDim, hiddenSize],
+                CreateRandomData(numKvHeads * kLayerHeadDim * hiddenSize));
 
             // Only emit v_proj when K and V are not shared
             if (!attentionKeyEqualsValue)
             {
-                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * layerHeadDim, hiddenSize],
-                    CreateRandomData(numKvHeads * layerHeadDim * hiddenSize));
+                tensors[$"{prefix}.self_attn.v_proj.weight"] = ("F32", [numKvHeads * kLayerHeadDim, hiddenSize],
+                    CreateRandomData(numKvHeads * kLayerHeadDim * hiddenSize));
             }
 
-            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * layerHeadDim],
-                CreateRandomData(hiddenSize * numQueryHeads * layerHeadDim));
+            tensors[$"{prefix}.self_attn.o_proj.weight"] = ("F32", [hiddenSize, numQueryHeads * qLayerHeadDim],
+                CreateRandomData(hiddenSize * numQueryHeads * qLayerHeadDim));
 
             // FFN projections
             tensors[$"{prefix}.mlp.gate_proj.weight"] = ("F32", [intermediateSize, hiddenSize],
@@ -275,6 +398,16 @@ public sealed class Gemma4ModelTests
         return (config, loader);
     }
 
+    /// <summary>
+    /// Generates an array of pseudo-random floating-point values for testing or simulation purposes.
+    /// </summary>
+    /// <remarks>The generated values are deterministic for a given count, making this method suitable for
+    /// repeatable tests or simulations.</remarks>
+    /// <param name="count">The number of elements to include in the returned array. Must be non-negative.</param>
+    /// <returns>
+    /// An array of single-precision floating-point numbers containing pseudo-random values. The array length is equal
+    /// to the specified count.
+    /// </returns>
     private static float[] CreateRandomData(int count)
     {
         var data = new float[count];
@@ -288,6 +421,15 @@ public sealed class Gemma4ModelTests
         return data;
     }
 
+    /// <summary>
+    /// Creates an array of the specified length that is filled entirely with ones.
+    /// </summary>
+    /// <param name="count">
+    /// The number of elements in the returned array. Must be greater than or equal to 0.
+    /// </param>
+    /// <returns>
+    /// A float array with the specified number of elements, where each element has the value 1.0f.
+    /// </returns>
     private static float[] CreateOnesData(int count)
     {
         var data = new float[count];
@@ -295,6 +437,23 @@ public sealed class Gemma4ModelTests
         return data;
     }
 
+    /// <summary>
+    /// Creates a byte representation of a SafeTensors file from the provided tensor data.
+    /// </summary>
+    /// <remarks>
+    /// The method serializes the tensors into the SafeTensors format, storing the data as
+    /// little-endian floats. The header contains metadata for each tensor, including data type,
+    /// shape, and data offsets. The method supports only tensors whose data consists of
+    /// floating‑point values.
+    /// </remarks>
+    /// <param name="tensors">
+    /// A dictionary mapping tensor names to their associated data type, shape, and floating‑point
+    /// values. Each entry contains the data type as a string, the shape as an array of lengths,
+    /// and the tensor data as an array of floats.
+    /// </param>
+    /// <returns>
+    /// A byte array containing the SafeTensors file, including the header and the binary tensor data.
+    /// </returns>
     private static byte[] CreateSafeTensorsFile(
         Dictionary<string, (string dtype, long[] shape, float[] data)> tensors)
     {

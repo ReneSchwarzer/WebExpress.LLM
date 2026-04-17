@@ -81,7 +81,7 @@ public sealed class Gemma4Model
         }
 
         // 3. Final RMS normalization
-        var finalNormWeight = _loader.LoadTensor("model.norm.weight");
+        var finalNormWeight = _loader.LoadTensor("model.language_model.norm.weight");
         hidden = TensorOperations.RmsNorm(hidden, finalNormWeight, rmsEps);
 
         // 4. Project to vocabulary logits
