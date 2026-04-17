@@ -50,9 +50,10 @@ public sealed class ApplicationConfiguration
 
     /// <summary>
     /// Gets the path to the tokenizer model file, relative to the model directory.
-    /// For SentencePiece tokenizer type, this should point to the binary <c>tokenizer.model</c> file.
+    /// For SentencePiece tokenizer type, this should be set to the binary <c>tokenizer.model</c> file.
     /// For Gemma tokenizer type, this should point to the <c>tokenizer.json</c> file.
-    /// Defaults to "tokenizer.json" when not specified.
+    /// Defaults to "tokenizer.json" (Gemma). Override via the <c>modelPath</c> attribute
+    /// in the <c>&lt;tokenizer&gt;</c> element of the configuration file.
     /// </summary>
     public string TokenizerModelPath { get; init; } = "tokenizer.json";
 
