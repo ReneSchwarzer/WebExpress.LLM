@@ -263,14 +263,13 @@ public sealed class SentencePieceTokenizer : ITokenizer
 
     /// <summary>
     /// Splits input text into words following SentencePiece conventions.
-    /// Each word is prefixed with the ▁ (U+2581) character to represent a word boundary,
-    /// except that the very first word gets the prefix too (matching SentencePiece behavior).
+    /// Every word is prefixed with the ▁ (U+2581) character to represent a word boundary,
+    /// including the very first word (matching standard SentencePiece behavior).
     /// </summary>
     private static List<string> SplitIntoWords(string text)
     {
         var words = new List<string>();
         var current = new StringBuilder();
-        var isFirst = true;
 
         for (var i = 0; i < text.Length; i++)
         {
@@ -283,21 +282,13 @@ public sealed class SentencePieceTokenizer : ITokenizer
                     words.Add(current.ToString());
                     current.Clear();
                 }
-
-                // The next non-whitespace token gets a ▁ prefix
-                isFirst = false;
             }
             else
             {
                 if (current.Length == 0)
                 {
-                    // Prefix with ▁ for word boundaries (including the first word)
-                    if (!isFirst || i == 0)
-                    {
-                        current.Append(SpaceSymbol);
-                    }
-
-                    isFirst = false;
+                    // Every word starts with ▁ (including the first word)
+                    current.Append(SpaceSymbol);
                 }
 
                 current.Append(ch);
