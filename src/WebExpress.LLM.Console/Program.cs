@@ -182,18 +182,14 @@ internal class Program
 
     /// <summary>
     /// Creates a <see cref="SentencePieceTokenizer"/> from the application configuration.
-    /// Resolves the .model file path relative to the model directory and optionally loads
-    /// <c>tokenizer_config.json</c> from the same directory to configure special token behavior.
+    /// Tries <c>tokenizer.json</c> (HuggingFace tokenizers format) first because it is a reliable
+    /// JSON representation. Falls back to the binary SentencePiece <c>.model</c> file when
+    /// <c>tokenizer.json</c> is absent. In both cases, <c>tokenizer_config.json</c> is loaded
+    /// when present to supply special-token names and <c>add_bos_token</c>/<c>add_eos_token</c> flags.
     /// </summary>
     private static SentencePieceTokenizer CreateSentencePieceTokenizer(ApplicationConfiguration config)
     {
         var modelDir = Path.Combine(config.ModelPath, config.ModelName);
-
-        // Resolve the .model file path: if it is already absolute use it as-is,
-        // otherwise treat it as relative to the model directory.
-        var spModelPath = Path.IsPathRooted(config.TokenizerModelPath)
-            ? config.TokenizerModelPath
-            : Path.Combine(modelDir, config.TokenizerModelPath);
 
         // Load tokenizer_config.json when present (optional)
         TokenizerConfiguration tokenizerConfig = null;
@@ -203,6 +199,20 @@ internal class Program
         {
             tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
         }
+
+        // Prefer tokenizer.json (HuggingFace tokenizers JSON format) — reliable and human-readable.
+        // Models like Gemma ship this file alongside tokenizer.model.
+        var tokenizerJsonPath = Path.Combine(modelDir, "tokenizer.json");
+
+        if (File.Exists(tokenizerJsonPath))
+        {
+            return SentencePieceTokenizer.FromTokenizerJson(tokenizerJsonPath, tokenizerConfig);
+        }
+
+        // Fall back to the SentencePiece binary .model file.
+        var spModelPath = Path.IsPathRooted(config.TokenizerModelPath)
+            ? config.TokenizerModelPath
+            : Path.Combine(modelDir, config.TokenizerModelPath);
 
         return SentencePieceTokenizer.FromModel(spModelPath, tokenizerConfig);
     }

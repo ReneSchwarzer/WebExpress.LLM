@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 
 namespace WebExpress.LLM.Tokenization;
 
@@ -211,15 +212,103 @@ public sealed class SentencePieceTokenizer : ITokenizer
         var modelData = File.ReadAllBytes(modelPath);
         var (vocabulary, merges) = ParseSentencePieceModel(modelData);
 
-        // Determine special token IDs from vocabulary
-        var unkId = vocabulary.TryGetValue("<unk>", out var uid) ? uid : 0;
-        var bosId = vocabulary.TryGetValue("<s>", out var bid) ? bid : 1;
-        var eosId = vocabulary.TryGetValue("</s>", out var eid) ? eid : 2;
+        // Determine special token IDs: prefer config-specified token strings, then common fallbacks.
+        var unkId = ResolveTokenId(vocabulary, config?.UnkToken, "<unk>", 0);
+        var bosId = ResolveTokenId(vocabulary, config?.BosToken, "<s>", 1);
+        var eosId = ResolveTokenId(vocabulary, config?.EosToken, "</s>", 2);
 
         var addBos = config?.AddBosToken ?? true;
         var addEos = config?.AddEosToken ?? false;
 
         return new SentencePieceTokenizer(vocabulary, merges, unkId, bosId, eosId, addBos, addEos);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SentencePieceTokenizer"/> from a HuggingFace <c>tokenizer.json</c> file.
+    /// This format is the primary tokenizer format for models hosted on HuggingFace Hub and contains
+    /// vocabulary, merge rules, and special token definitions in a well-structured JSON layout.
+    /// </summary>
+    /// <param name="tokenizerJsonPath">Path to the <c>tokenizer.json</c> file.</param>
+    /// <param name="config">
+    /// Optional tokenizer configuration that overrides special token names and behavior.
+    /// When provided, its <c>BosToken</c>/<c>EosToken</c>/<c>UnkToken</c> strings are used to look
+    /// up the correct token IDs from the vocabulary (e.g. <c>&lt;bos&gt;</c> for Gemma models).
+    /// </param>
+    /// <returns>A new <see cref="SentencePieceTokenizer"/> instance.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="tokenizerJsonPath"/> is null or whitespace.</exception>
+    /// <exception cref="FileNotFoundException">Thrown when the file does not exist.</exception>
+    /// <exception cref="InvalidDataException">Thrown when the file lacks a valid <c>model</c> section or vocabulary.</exception>
+    public static SentencePieceTokenizer FromTokenizerJson(
+        string tokenizerJsonPath,
+        TokenizerConfiguration config = null)
+    {
+        if (string.IsNullOrWhiteSpace(tokenizerJsonPath))
+        {
+            throw new ArgumentException("Tokenizer JSON path must be provided.", nameof(tokenizerJsonPath));
+        }
+
+        if (!File.Exists(tokenizerJsonPath))
+        {
+            throw new FileNotFoundException("tokenizer.json was not found.", tokenizerJsonPath);
+        }
+
+        var json = File.ReadAllText(tokenizerJsonPath);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("model", out var modelElement))
+        {
+            throw new InvalidDataException("tokenizer.json does not contain a 'model' section.");
+        }
+
+        // Read vocabulary
+        var vocab = new Dictionary<string, int>();
+
+        if (modelElement.TryGetProperty("vocab", out var vocabElement))
+        {
+            foreach (var kv in vocabElement.EnumerateObject())
+            {
+                vocab[kv.Name] = kv.Value.GetInt32();
+            }
+        }
+
+        if (vocab.Count == 0)
+        {
+            throw new InvalidDataException("tokenizer.json contains no vocabulary entries.");
+        }
+
+        // Read merge rules ("left right" strings → (left, right) tuples)
+        var mergePairs = new List<(string, string)>();
+
+        if (modelElement.TryGetProperty("merges", out var mergesElement))
+        {
+            foreach (var m in mergesElement.EnumerateArray())
+            {
+                var s = m.GetString();
+
+                if (string.IsNullOrEmpty(s))
+                {
+                    continue;
+                }
+
+                var parts = s.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+
+                if (parts.Length == 2)
+                {
+                    mergePairs.Add((parts[0], parts[1]));
+                }
+            }
+        }
+
+        // Resolve special token IDs: prefer config-specified token strings, then common fallbacks.
+        var unkId = ResolveTokenId(vocab, config?.UnkToken, "<unk>", 0);
+        var bosId = ResolveTokenId(vocab, config?.BosToken, "<s>", 1);
+        var eosId = ResolveTokenId(vocab, config?.EosToken, "</s>", 2);
+
+        var addBos = config?.AddBosToken ?? true;
+        var addEos = config?.AddEosToken ?? false;
+
+        return new SentencePieceTokenizer(vocab, mergePairs, unkId, bosId, eosId, addBos, addEos);
     }
 
     /// <summary>
@@ -251,14 +340,33 @@ public sealed class SentencePieceTokenizer : ITokenizer
             }
         }
 
-        var unkId = vocabulary.TryGetValue("<unk>", out var uid) ? uid : 0;
-        var bosId = vocabulary.TryGetValue("<s>", out var bid) ? bid : 1;
-        var eosId = vocabulary.TryGetValue("</s>", out var eid) ? eid : 2;
+        var unkId = ResolveTokenId(vocabulary, config?.UnkToken, "<unk>", 0);
+        var bosId = ResolveTokenId(vocabulary, config?.BosToken, "<s>", 1);
+        var eosId = ResolveTokenId(vocabulary, config?.EosToken, "</s>", 2);
 
         var addBos = config?.AddBosToken ?? true;
         var addEos = config?.AddEosToken ?? false;
 
         return new SentencePieceTokenizer(vocabulary, mergePairs, unkId, bosId, eosId, addBos, addEos);
+    }
+
+    /// <summary>
+    /// Resolves a special token ID from the vocabulary, preferring <paramref name="configTokenName"/>
+    /// (from tokenizer config) over <paramref name="fallbackTokenName"/> (common default like "&lt;s&gt;"),
+    /// and finally returning <paramref name="defaultId"/> when neither is present in the vocabulary.
+    /// </summary>
+    private static int ResolveTokenId(
+        IReadOnlyDictionary<string, int> vocab,
+        string configTokenName,
+        string fallbackTokenName,
+        int defaultId)
+    {
+        if (!string.IsNullOrEmpty(configTokenName) && vocab.TryGetValue(configTokenName, out var configId))
+        {
+            return configId;
+        }
+
+        return vocab.TryGetValue(fallbackTokenName, out var fallbackId) ? fallbackId : defaultId;
     }
 
     /// <summary>
