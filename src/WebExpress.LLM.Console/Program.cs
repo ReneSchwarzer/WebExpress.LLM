@@ -40,8 +40,7 @@ internal class Program
         {
             var configLoader = new ConfigurationLoader();
             config = configLoader.Load(configPath);
-            System.Console.WriteLine($"Configuration loaded: {config.ModelName}");
-            System.Console.WriteLine();
+            System.Console.WriteLine($"Model path loaded: {config.ModelPath}");
         }
         catch (Exception ex)
         {
@@ -54,6 +53,8 @@ internal class Program
         ITokenizer tokenizer = config.TokenizerType.ToLowerInvariant() switch
         {
             "byte" => new ByteTokenizer(),
+            "sentencepiece" => CreateSentencePieceTokenizer(config),
+            "gemma" => CreateGemmaTokenizer(config),
             _ => throw new InvalidOperationException($"Unsupported tokenizer type: {config.TokenizerType}")
         };
 
@@ -71,14 +72,13 @@ internal class Program
         else if (Directory.Exists(config.ModelPath))
         {
             // load the actual model from the configured path
-            System.Console.WriteLine($"Loading model from: {config.ModelPath}");
-            System.Console.WriteLine();
+            System.Console.WriteLine($"Loading model: {config.ModelName}");
 
             try
             {
-                // Load the model configuration and weights from the specified directory
+                // load the model configuration and weights from the specified directory
                 var loader = new ModelLoader();
-                model = loader.Load(config.ModelPath);
+                model = loader.Load(Path.Combine(config.ModelPath, config.ModelName));
 
                 // create generation configuration from application settings
                 var generationConfig = new GenerationConfig
@@ -94,19 +94,18 @@ internal class Program
                 var samplingStrategy = generationConfig.CreateSamplingStrategy();
                 inferenceEngine = new TransformerInferenceEngine(model, samplingStrategy);
 
-                System.Console.WriteLine("Model loaded successfully.");
-                System.Console.WriteLine($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
+                System.Console.Write($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
                 if (config.TopK.HasValue)
                 {
-                    System.Console.WriteLine($"  Sampling: Top-K (k={config.TopK.Value})");
+                    System.Console.WriteLine($", Sampling: Top-K (k={config.TopK.Value})");
                 }
                 else if (config.TopP.HasValue)
                 {
-                    System.Console.WriteLine($"  Sampling: Top-P (p={config.TopP.Value})");
+                    System.Console.WriteLine($", Sampling: Top-P (p={config.TopP.Value})");
                 }
                 else
                 {
-                    System.Console.WriteLine("  Sampling: Greedy");
+                    System.Console.WriteLine(", Sampling: Greedy");
                 }
                 System.Console.WriteLine();
             }
@@ -180,5 +179,57 @@ internal class Program
         model?.Dispose();
 
         return 0;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SentencePieceTokenizer"/> from the application configuration.
+    /// Loads the binary SentencePiece <c>.model</c> file and optionally reads
+    /// <c>tokenizer_config.json</c> for special-token flags (<c>add_bos_token</c>/<c>add_eos_token</c>).
+    /// </summary>
+    private static SentencePieceTokenizer CreateSentencePieceTokenizer(ApplicationConfiguration config)
+    {
+        var modelDir = Path.Combine(config.ModelPath, config.ModelName);
+
+        // Load tokenizer_config.json when present (optional)
+        TokenizerConfiguration tokenizerConfig = null;
+        var tokenizerConfigPath = Path.Combine(modelDir, "tokenizer_config.json");
+
+        if (File.Exists(tokenizerConfigPath))
+        {
+            tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
+        }
+
+        // Load the SentencePiece binary .model file.
+        var spModelPath = Path.IsPathRooted(config.TokenizerModelPath)
+            ? config.TokenizerModelPath
+            : Path.Combine(modelDir, config.TokenizerModelPath);
+
+        return SentencePieceTokenizer.FromModel(spModelPath, tokenizerConfig);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="GemmaTokenizer"/> from the application configuration.
+    /// Reads <c>tokenizer.json</c> (HuggingFace tokenizers format) and optionally reads
+    /// <c>tokenizer_config.json</c> for special-token names and <c>add_bos_token</c>/<c>add_eos_token</c> flags.
+    /// </summary>
+    private static GemmaTokenizer CreateGemmaTokenizer(ApplicationConfiguration config)
+    {
+        var modelDir = Path.Combine(config.ModelPath, config.ModelName);
+
+        // Load tokenizer_config.json when present (optional)
+        TokenizerConfiguration tokenizerConfig = null;
+        var tokenizerConfigPath = Path.Combine(modelDir, "tokenizer_config.json");
+
+        if (File.Exists(tokenizerConfigPath))
+        {
+            tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
+        }
+
+        // Load tokenizer.json (required for Gemma)
+        var tokenizerJsonPath = Path.IsPathRooted(config.TokenizerModelPath)
+            ? config.TokenizerModelPath
+            : Path.Combine(modelDir, config.TokenizerModelPath);
+
+        return GemmaTokenizer.FromTokenizerJson(tokenizerJsonPath, tokenizerConfig);
     }
 }

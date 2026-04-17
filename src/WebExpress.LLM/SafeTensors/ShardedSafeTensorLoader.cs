@@ -58,6 +58,8 @@ public sealed class ShardedSafeTensorLoader : ISafeTensorLoader, IDisposable
             _shardLoaders[shardFile] = new SafeTensorLoader(weights);
         }
 
+        RecomputeShardBaseOffsets();
+
         _tensorNames = index.WeightMap.Keys.ToList().AsReadOnly();
     }
 
@@ -89,6 +91,8 @@ public sealed class ShardedSafeTensorLoader : ISafeTensorLoader, IDisposable
                     $"Shard file '{shardFile}' referenced by the index is missing from the provided loaders.");
             }
         }
+
+        RecomputeShardBaseOffsets();
 
         _tensorNames = index.WeightMap.Keys.ToList().AsReadOnly();
     }
@@ -189,5 +193,76 @@ public sealed class ShardedSafeTensorLoader : ISafeTensorLoader, IDisposable
         }
 
         return loader;
+    }
+
+    /// <summary>
+    /// Recomputes the base offset for each shard using only the tensors that
+    /// the index maps to that shard. This avoids the problem where a shard's
+    /// header lists tensors from other shards whose offsets would poison the
+    /// minimum base offset calculation in <see cref="SafeTensorLoader"/>.
+    /// </summary>
+    private void RecomputeShardBaseOffsets()
+    {
+        // Group tensor names by shard file
+        var tensorsByShardFile = _index.WeightMap
+            .GroupBy(kv => kv.Value, kv => kv.Key, StringComparer.Ordinal);
+
+        foreach (var group in tensorsByShardFile)
+        {
+            var shardFile = group.Key;
+
+            if (!_shardLoaders.TryGetValue(shardFile, out var loader))
+            {
+                continue;
+            }
+
+            var dataSize = loader.DataSectionSize;
+            long maxEnd = 0;
+            var minBegin = long.MaxValue;
+
+            foreach (var tensorName in group)
+            {
+                if (!loader.ContainsTensor(tensorName))
+                {
+                    continue;
+                }
+
+                var meta = loader.GetMetadata(tensorName);
+
+                if (meta.DataOffsets.Count < 2)
+                {
+                    continue;
+                }
+
+                var begin = meta.DataOffsets[0];
+                var end = meta.DataOffsets[1];
+
+                // Skip zero-size tensors
+                if (end <= begin)
+                {
+                    continue;
+                }
+
+                if (begin < minBegin)
+                {
+                    minBegin = begin;
+                }
+
+                if (end > maxEnd)
+                {
+                    maxEnd = end;
+                }
+            }
+
+            // If all offsets fit within the data section, they're already local — no adjustment needed.
+            if (maxEnd <= dataSize || minBegin == long.MaxValue)
+            {
+                loader.SetBaseOffset(0);
+            }
+            else
+            {
+                loader.SetBaseOffset(minBegin);
+            }
+        }
     }
 }

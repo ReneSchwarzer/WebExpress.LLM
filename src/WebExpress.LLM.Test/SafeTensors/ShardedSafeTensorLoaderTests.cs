@@ -311,6 +311,83 @@ public sealed class ShardedSafeTensorLoaderTests
         Assert.Equal(new[] { 50f, 60f }, loader.LoadTensor("layer.2.weight").Data);
     }
 
+    [Fact]
+    public void LoadTensor_WithGlobalOffsetsAndCrossShardMetadata_ShouldLoadCorrectly()
+    {
+        // Reproduce the bug: each shard's header lists ALL model tensors with
+        // global offsets, but only stores data for its own tensors. The index
+        // correctly maps tensors to shards. Without the ShardedSafeTensorLoader
+        // recomputing the base offset per shard (using only index-mapped tensors),
+        // the SafeTensorLoader's ComputeBaseOffset picks up offsets from other
+        // shards' tensors, producing a wrong base and an out-of-range read.
+        var shard1Data = new float[] { 1f, 2f, 3f, 4f };    // 16 bytes
+        var shard2Data = new float[] { 10f, 20f, 30f };      // 12 bytes
+
+        var shard1Raw = FloatsToBytes(shard1Data);
+        var shard2Raw = FloatsToBytes(shard2Data);
+
+        // Global offsets: shard 1 tensors at [0..8] and [8..16], shard 2 at [16..24] and [24..28]
+        long globalBase2 = shard1Raw.Length; // = 16
+
+        // Shard 1 file: header lists ALL tensors with global offsets, data has shard1 only
+        var shard1Bytes = CreateSafeTensorsFileWithGlobalHeader(
+            allTensorHeaders: new Dictionary<string, (string dtype, long[] shape, long begin, long end)>
+            {
+                ["tensor_a"] = ("F32", [2], 0, 8),
+                ["tensor_b"] = ("F32", [2], 8, 16),
+                ["tensor_c"] = ("F32", [2], globalBase2, globalBase2 + 8),
+                ["tensor_d"] = ("F32", [1], globalBase2 + 8, globalBase2 + 12)
+            },
+            localData: shard1Raw);
+
+        // Shard 2 file: header lists ALL tensors with global offsets, data has shard2 only
+        var shard2Bytes = CreateSafeTensorsFileWithGlobalHeader(
+            allTensorHeaders: new Dictionary<string, (string dtype, long[] shape, long begin, long end)>
+            {
+                ["tensor_a"] = ("F32", [2], 0, 8),
+                ["tensor_b"] = ("F32", [2], 8, 16),
+                ["tensor_c"] = ("F32", [2], globalBase2, globalBase2 + 8),
+                ["tensor_d"] = ("F32", [1], globalBase2 + 8, globalBase2 + 12)
+            },
+            localData: shard2Raw);
+
+        var index = SafeTensorIndex.Parse("""
+        {
+            "metadata": { "total_parameters": 7, "total_size": 28 },
+            "weight_map": {
+                "tensor_a": "shard-00001.safetensors",
+                "tensor_b": "shard-00001.safetensors",
+                "tensor_c": "shard-00002.safetensors",
+                "tensor_d": "shard-00002.safetensors"
+            }
+        }
+        """);
+
+        var shardLoaders = new Dictionary<string, SafeTensorLoader>
+        {
+            ["shard-00001.safetensors"] = new(ModelWeights.FromByteArray(shard1Bytes)),
+            ["shard-00002.safetensors"] = new(ModelWeights.FromByteArray(shard2Bytes))
+        };
+
+        var loader = new ShardedSafeTensorLoader(index, shardLoaders);
+
+        // Load from shard 1 (local offsets start at 0, should work regardless)
+        var tA = loader.LoadTensor("tensor_a");
+        Assert.Equal(new[] { 1f, 2f }, tA.Data);
+
+        var tB = loader.LoadTensor("tensor_b");
+        Assert.Equal(new[] { 3f, 4f }, tB.Data);
+
+        // Load from shard 2 — these have global offsets > shard2 file size.
+        // Without the fix, this would throw ArgumentOutOfRangeException because
+        // the base offset would be 0 (from tensor_a's global offset in the header).
+        var tC = loader.LoadTensor("tensor_c");
+        Assert.Equal(new[] { 10f, 20f }, tC.Data);
+
+        var tD = loader.LoadTensor("tensor_d");
+        Assert.Equal(new[] { 30f }, tD.Data);
+    }
+
     // ---------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------
@@ -406,5 +483,49 @@ public sealed class ShardedSafeTensorLoaderTests
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Creates a SafeTensors file where the header lists ALL tensors (possibly from
+    /// other shards) with arbitrary data offsets, but only contains the given local data.
+    /// </summary>
+    private static byte[] CreateSafeTensorsFileWithGlobalHeader(
+        Dictionary<string, (string dtype, long[] shape, long begin, long end)> allTensorHeaders,
+        byte[] localData)
+    {
+        var header = new Dictionary<string, object>();
+
+        foreach (var (name, (dtype, shape, begin, end)) in allTensorHeaders)
+        {
+            header[name] = new
+            {
+                dtype,
+                shape,
+                data_offsets = new long[] { begin, end }
+            };
+        }
+
+        var headerJson = JsonSerializer.Serialize(header);
+        var headerBytes = Encoding.UTF8.GetBytes(headerJson);
+
+        var result = new byte[8 + headerBytes.Length + localData.Length];
+
+        BinaryPrimitives.WriteInt64LittleEndian(result, headerBytes.Length);
+        Array.Copy(headerBytes, 0, result, 8, headerBytes.Length);
+        Array.Copy(localData, 0, result, 8 + headerBytes.Length, localData.Length);
+
+        return result;
+    }
+
+    private static byte[] FloatsToBytes(float[] values)
+    {
+        var bytes = new byte[values.Length * 4];
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan(i * 4), values[i]);
+        }
+
+        return bytes;
     }
 }

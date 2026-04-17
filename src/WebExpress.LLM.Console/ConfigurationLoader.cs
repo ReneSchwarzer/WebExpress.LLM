@@ -49,8 +49,15 @@ public sealed class ConfigurationLoader
             }
 
             var modelElement = root.Element("model") ?? throw new InvalidDataException("Configuration file is missing 'model' element.");
-            var modelName = modelElement.Attribute("name")?.Value ?? throw new InvalidDataException("Model element is missing 'name' attribute.");
-            var modelPath = modelElement.Element("path")?.Value ?? throw new InvalidDataException("Model element is missing 'path' element.");
+            var modelName = modelElement.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(modelName))
+            {
+                throw new InvalidDataException("Model element must contain the model name.");
+            }
+            var modelPath = root.Element("path")?.Value?.Trim()
+                ?? throw new InvalidDataException("Configuration file is missing global 'path' element.");
+
+            modelPath = Path.GetFullPath(modelPath ?? Path.Combine(Environment.CurrentDirectory, "models"));
 
             // Load inference configuration (optional)
             var inferenceElement = root.Element("inference");
@@ -63,6 +70,7 @@ public sealed class ConfigurationLoader
             // Load tokenizer configuration (optional)
             var tokenizerElement = root.Element("tokenizer");
             var tokenizerType = tokenizerElement?.Attribute("type")?.Value ?? "byte";
+            var tokenizerModelPath = tokenizerElement?.Attribute("modelPath")?.Value ?? "tokenizer.json";
 
             // Load runtime configuration (optional)
             var runtimeElement = root.Element("runtime");
@@ -78,6 +86,7 @@ public sealed class ConfigurationLoader
                 TopP = topP,
                 Seed = seed,
                 TokenizerType = tokenizerType,
+                TokenizerModelPath = tokenizerModelPath,
                 UseDeterministicEngine = useDeterministicEngine
             };
         }
@@ -87,26 +96,97 @@ public sealed class ConfigurationLoader
         }
     }
 
+    /// <summary>
+    /// Parses a string into an integer and returns a default value if the input is null,
+    /// empty, or consists only of whitespace.
+    /// </summary>
+    /// <param name="value">
+    /// The string to parse, expected to represent an integer. May be null, empty,
+    /// or contain only whitespace.
+    /// </param>
+    /// <param name="defaultValue">
+    /// The value to return when the input is invalid or cannot be parsed.
+    /// </param>
+    /// <returns>
+    /// The parsed integer from the input string, or the specified default value if the
+    /// input is null, empty, or consists only of whitespace.
+    /// </returns>
     private static int ParseInt(string value, int defaultValue)
     {
         return string.IsNullOrWhiteSpace(value) ? defaultValue : int.Parse(value);
     }
 
+    /// <summary>
+    /// Parses a string into a floating‑point value and returns a default value if the input is null,
+    /// empty, or consists only of whitespace.
+    /// </summary>
+    /// <param name="value">
+    /// The string to parse, expected to represent a floating‑point value. May be null, empty,
+    /// or contain only whitespace.
+    /// </param>
+    /// <param name="defaultValue">
+    /// The value to return when <paramref name="value"/> is null, empty, or consists only of whitespace.
+    /// </param>
+    /// <returns>
+    /// The floating‑point value parsed from <paramref name="value"/>, or <paramref name="defaultValue"/>
+    /// if the input is invalid.
+    /// </returns>
     private static float ParseFloat(string value, float defaultValue)
     {
         return string.IsNullOrWhiteSpace(value) ? defaultValue : float.Parse(value);
     }
 
+    /// <summary>
+    /// Parses a string as a boolean value and returns a default value if the input is null,
+    /// empty, or consists only of whitespace.
+    /// </summary>
+    /// <remarks>
+    /// Throws an exception if <paramref name="value"/> is not null, empty, or whitespace
+    /// and does not represent a valid boolean value.
+    /// </remarks>
+    /// <param name="value">
+    /// The string to parse, expected to represent a boolean value. May be null, empty,
+    /// or contain only whitespace.
+    /// </param>
+    /// <param name="defaultValue">
+    /// The value to return when <paramref name="value"/> is null, empty, or consists only
+    /// of whitespace.
+    /// </param>
+    /// <returns>
+    /// The boolean value parsed from <paramref name="value"/>, or <paramref name="defaultValue"/>
+    /// if the input is null, empty, or consists only of whitespace.
+    /// </returns>
     private static bool ParseBool(string value, bool defaultValue)
     {
         return string.IsNullOrWhiteSpace(value) ? defaultValue : bool.Parse(value);
     }
 
+    /// <summary>
+    /// Converts the specified string into a nullable integer value.
+    /// </summary>
+    /// <param name="value">
+    /// The string to convert. May be null or empty.
+    /// </param>
+    /// <returns>
+    /// An integer value representing the converted string, or <c>null</c> if the
+    /// input cannot be converted.
+    /// </returns>
     private static int? ParseNullableInt(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : int.Parse(value);
     }
 
+    /// <summary>
+    /// Parses a string and returns the corresponding floating‑point value, or <c>null</c>
+    /// if the input is empty or consists only of whitespace.
+    /// </summary>
+    /// <param name="value">
+    /// The string to parse. May be null, empty, or contain only whitespace.
+    /// </param>
+    /// <returns>
+    /// A nullable float containing the parsed value, or <c>null</c> if the input is
+    /// empty or consists only of whitespace.
+    /// </returns>
     private static float? ParseNullableFloat(string value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : float.Parse(value);

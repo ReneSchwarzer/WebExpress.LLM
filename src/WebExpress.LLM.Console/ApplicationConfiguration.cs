@@ -44,9 +44,18 @@ public sealed class ApplicationConfiguration
     public int? Seed { get; init; }
 
     /// <summary>
-    /// Gets the tokenizer type to use (e.g., "byte", "vocabulary").
+    /// Gets the tokenizer type to use (e.g., "byte", "sentencepiece").
     /// </summary>
     public string TokenizerType { get; init; } = "byte";
+
+    /// <summary>
+    /// Gets the path to the tokenizer model file, relative to the model directory.
+    /// For SentencePiece tokenizer type, this should be set to the binary <c>tokenizer.model</c> file.
+    /// For Gemma tokenizer type, this should point to the <c>tokenizer.json</c> file.
+    /// Defaults to "tokenizer.json" (Gemma). Override via the <c>modelPath</c> attribute
+    /// in the <c>&lt;tokenizer&gt;</c> element of the configuration file.
+    /// </summary>
+    public string TokenizerModelPath { get; init; } = "tokenizer.json";
 
     /// <summary>
     /// Gets a value indicating whether to use deterministic inference engine for testing.
