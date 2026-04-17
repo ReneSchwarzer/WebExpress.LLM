@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
@@ -116,8 +117,6 @@ public sealed class ChatSession
         var prompt = FormatPrompt();
         var promptTokens = _tokenizer.Encode(prompt);
 
-        yield return $"Raw prompt: '{prompt}'\n\n";
-
         var responseBuilder = new StringBuilder();
         var responseTokens = new List<int>();
 
@@ -126,7 +125,7 @@ public sealed class ChatSession
             responseTokens.Add(token);
             var decodedText = _tokenizer.Decode([token]);
             responseBuilder.Append(decodedText);
-            yield return decodedText.Trim() + " ";
+            yield return decodedText;
         }
 
         var assistant = new ChatMessage("assistant", responseBuilder.ToString());
@@ -146,19 +145,11 @@ public sealed class ChatSession
     /// </returns>
     private string FormatPrompt()
     {
-        //if (_chatTemplate != null)
-        //{
-        //    //return "<bos><start_of_turn>user\r\nhallo\r\n<end_of_turn>\r\n<start_of_turn>model\r\n";
-        //    //
-        //    return _chatTemplate.ApplyTemplate(_messages, addGenerationPrompt: true);
-        //}
+        if (_chatTemplate != null)
+        {
+            return _chatTemplate.ApplyTemplate(_messages, addGenerationPrompt: true);
+        }
 
-        //return "<bos><start_of_turn>system\r\nYou are a helpful assistant.\r\n<end_of_turn>\r\n<start_of_turn>user\r\nhallo\r\n<end_of_turn>\r\n<start_of_turn>model\r\n";
-
-        return "<bos>\n<|turn>system\nYou are a helpful assistant.\n<turn|>\n<|turn>user\nWhat is Gemma?\n<turn|>\n<|turn>model\n";
-
-        //return string.Join('\n', _messages.Select(static message => $"{message.Content}"));
-        //return string.Join('\n', _messages.Select(static message => $"<bos><|turn>{message.Role}\\n{message.Content}<turn|>\\n<|turn>model"));
-        //return string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));
+        return string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));
     }
 }
