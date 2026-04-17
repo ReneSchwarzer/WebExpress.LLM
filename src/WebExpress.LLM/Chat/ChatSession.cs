@@ -15,6 +15,7 @@ public sealed class ChatSession
 {
     private readonly ITokenizer _tokenizer;
     private readonly IInferenceEngine _inferenceEngine;
+    private readonly ChatTemplate _chatTemplate;
     private readonly List<ChatMessage> _messages = [];
 
     /// <summary>
@@ -34,13 +35,19 @@ public sealed class ChatSession
     /// The IInferenceEngine instance used to process input and generate responses  
     /// within the session. Must not be null.
     /// </param>
+    /// <param name="chatTemplate">
+    /// An optional <see cref="ChatTemplate"/> used to format conversation messages into
+    /// model-specific prompt strings. When <see langword="null"/>, a simple
+    /// <c>role: content</c> format is used.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="tokenizer"/> or <paramref name="inferenceEngine"/> is null.
     /// </exception>
-    public ChatSession(ITokenizer tokenizer, IInferenceEngine inferenceEngine)
+    public ChatSession(ITokenizer tokenizer, IInferenceEngine inferenceEngine, ChatTemplate chatTemplate = null)
     {
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
         _inferenceEngine = inferenceEngine ?? throw new ArgumentNullException(nameof(inferenceEngine));
+        _chatTemplate = chatTemplate;
     }
 
     /// <summary>
@@ -69,7 +76,7 @@ public sealed class ChatSession
         var user = new ChatMessage("user", userMessage);
         _messages.Add(user);
 
-        var prompt = string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));
+        var prompt = FormatPrompt();
         var promptTokens = _tokenizer.Encode(prompt);
         var responseTokens = _inferenceEngine.GenerateTokens(promptTokens, maxNewTokens);
         var responseText = _tokenizer.Decode(responseTokens);
@@ -107,7 +114,7 @@ public sealed class ChatSession
         var user = new ChatMessage("user", userMessage);
         _messages.Add(user);
 
-        var prompt = string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));
+        var prompt = FormatPrompt();
         var promptTokens = _tokenizer.Encode(prompt);
 
         var responseBuilder = new StringBuilder();
@@ -123,5 +130,26 @@ public sealed class ChatSession
 
         var assistant = new ChatMessage("assistant", responseBuilder.ToString());
         _messages.Add(assistant);
+    }
+
+    /// <summary>
+    /// Formats the current conversation history into a prompt string suitable for the inference engine.
+    /// </summary>
+    /// <remarks>
+    /// When a <see cref="ChatTemplate"/> is available, the template's turn-based format is used.
+    /// Otherwise, messages are concatenated using a simple <c>role: content</c> format separated
+    /// by newlines.
+    /// </remarks>
+    /// <returns>
+    /// A formatted prompt string ready for tokenization.
+    /// </returns>
+    private string FormatPrompt()
+    {
+        if (_chatTemplate != null)
+        {
+            return _chatTemplate.ApplyTemplate(_messages, addGenerationPrompt: true);
+        }
+
+        return string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));
     }
 }
