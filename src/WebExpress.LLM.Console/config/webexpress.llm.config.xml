@@ -27,7 +27,8 @@
 	<!-- type="byte"          : simple byte-level tokenizer (default) -->
 	<!-- type="sentencepiece" : SentencePiece BPE tokenizer; set modelPath to the .model file -->
 	<!--                        relative to the model directory, e.g. modelPath="tokenizer.model" -->
-	<tokenizer type="sentencepiece" />
+	<!-- type="gemma"         : gemma tokenizer -->
+	<tokenizer type="gemma" />
 
 	<!-- Runtime configuration: controls application behavior -->
 	<runtime>
