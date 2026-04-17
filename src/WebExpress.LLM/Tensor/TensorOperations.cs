@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
 namespace WebExpress.LLM.Tensor;
 
@@ -13,6 +14,11 @@ namespace WebExpress.LLM.Tensor;
 /// </remarks>
 public static class TensorOperations
 {
+    /// <summary>
+    /// The tile size used for cache-friendly loop blocking in matrix multiplication.
+    /// </summary>
+    private const int TileSize = 32;
+
     /// <summary>
     /// Performs matrix multiplication between two 2D tensors.
     /// </summary>
@@ -41,27 +47,50 @@ public static class TensorOperations
         }
 
         var result = new float[m * n];
-        var aData = a.Data;
-        var bData = b.Data;
-
-        for (var i = 0; i < m; i++)
-        {
-            var rowOffset = i * k;
-
-            for (var j = 0; j < n; j++)
-            {
-                var sum = 0.0f;
-
-                for (var p = 0; p < k; p++)
-                {
-                    sum += aData[rowOffset + p] * bData[p * n + j];
-                }
-
-                result[i * n + j] = sum;
-            }
-        }
+        MatMulCore(a.Data, b.Data, result, m, k, n);
 
         return new Tensor([m, n], result);
+    }
+
+    /// <summary>
+    /// Core matrix multiplication kernel using loop tiling for cache-friendly access.
+    /// Computes C = A × B where A is [M, K] and B is [K, N], all in row-major order.
+    /// The i-k-j loop order ensures sequential reads of both A and B rows.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void MatMulCore(float[] aData, float[] bData, float[] result, int m, int k, int n)
+    {
+        for (var iTile = 0; iTile < m; iTile += TileSize)
+        {
+            var iEnd = Math.Min(iTile + TileSize, m);
+
+            for (var kTile = 0; kTile < k; kTile += TileSize)
+            {
+                var kEnd = Math.Min(kTile + TileSize, k);
+
+                for (var jTile = 0; jTile < n; jTile += TileSize)
+                {
+                    var jEnd = Math.Min(jTile + TileSize, n);
+
+                    for (var i = iTile; i < iEnd; i++)
+                    {
+                        var aRowOffset = i * k;
+                        var rRowOffset = i * n;
+
+                        for (var p = kTile; p < kEnd; p++)
+                        {
+                            var aVal = aData[aRowOffset + p];
+                            var bRowOffset = p * n;
+
+                            for (var j = jTile; j < jEnd; j++)
+                            {
+                                result[rRowOffset + j] += aVal * bData[bRowOffset + j];
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -98,25 +127,45 @@ public static class TensorOperations
         var result = new float[batch * m * n];
         var aData = a.Data;
         var bData = b.Data;
+        var aSliceSize = m * k;
+        var bSliceSize = k * n;
+        var rSliceSize = m * n;
 
         for (var bIdx = 0; bIdx < batch; bIdx++)
         {
-            var aOffset = bIdx * m * k;
-            var bOffset = bIdx * k * n;
-            var rOffset = bIdx * m * n;
+            var aOffset = bIdx * aSliceSize;
+            var bOffset = bIdx * bSliceSize;
+            var rOffset = bIdx * rSliceSize;
 
-            for (var i = 0; i < m; i++)
+            for (var iTile = 0; iTile < m; iTile += TileSize)
             {
-                for (var j = 0; j < n; j++)
+                var iEnd = Math.Min(iTile + TileSize, m);
+
+                for (var kTile = 0; kTile < k; kTile += TileSize)
                 {
-                    var sum = 0.0f;
+                    var kEnd = Math.Min(kTile + TileSize, k);
 
-                    for (var p = 0; p < k; p++)
+                    for (var jTile = 0; jTile < n; jTile += TileSize)
                     {
-                        sum += aData[aOffset + i * k + p] * bData[bOffset + p * n + j];
-                    }
+                        var jEnd = Math.Min(jTile + TileSize, n);
 
-                    result[rOffset + i * n + j] = sum;
+                        for (var i = iTile; i < iEnd; i++)
+                        {
+                            var aRowOffset = aOffset + i * k;
+                            var rRowOffset = rOffset + i * n;
+
+                            for (var p = kTile; p < kEnd; p++)
+                            {
+                                var aVal = aData[aRowOffset + p];
+                                var bRowOffset = bOffset + p * n;
+
+                                for (var j = jTile; j < jEnd; j++)
+                                {
+                                    result[rRowOffset + j] += aVal * bData[bRowOffset + j];
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
