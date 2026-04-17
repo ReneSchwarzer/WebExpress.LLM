@@ -60,18 +60,20 @@ string prompt = template.ApplyTemplate(messages, addGenerationPrompt: true);
 
 The chat template uses a turn-based structure with the following special tokens:
 
-| Token | Purpose |
-|---|---|
-| `<bos>` | Beginning-of-sequence marker |
-| `<\|turn>role\n` | Start of a conversation turn for the given role |
-| `<turn\|>\n` | End of a conversation turn |
-| `<\|tool>…<tool\|>` | Tool/function declaration block |
-| `<\|tool_call>…<tool_call\|>` | Tool call invocation block |
-| `<\|tool_response>…<tool_response\|>` | Tool response block |
-| `<\|think\|>` | Thinking mode activation |
-| `<\|channel>thought\n…<channel\|>` | Thinking/reasoning channel |
-| `<\|"\|>` | Escaped double-quote within structured content |
-| `<\|image\|>`, `<\|audio\|>`, `<\|video\|>` | Multi-modal content placeholders |
+| Token | Purpose | Status |
+|---|---|---|
+| `<bos>` | Beginning-of-sequence marker | ✅ Implemented |
+| `<\|turn>role\n` | Start of a conversation turn for the given role | ✅ Implemented |
+| `<turn\|>\n` | End of a conversation turn | ✅ Implemented |
+| `<\|tool>…<tool\|>` | Tool/function declaration block | 📋 Template only |
+| `<\|tool_call>…<tool_call\|>` | Tool call invocation block | 📋 Template only |
+| `<\|tool_response>…<tool_response\|>` | Tool response block | 📋 Template only |
+| `<\|think\|>` | Thinking mode activation | 📋 Template only |
+| `<\|channel>thought\n…<channel\|>` | Thinking/reasoning channel | 📋 Template only |
+| `<\|"\|>` | Escaped double-quote within structured content | 📋 Template only |
+| `<\|image\|>`, `<\|audio\|>`, `<\|video\|>` | Multi-modal content placeholders | 📋 Template only |
+
+> **Note:** Tokens marked "📋 Template only" are defined in the Jinja2 template specification but are not yet handled by the C# `ApplyTemplate()` method. The current implementation covers the core message formatting (system, user, assistant turns with generation prompt). Support for tool calls, thinking channels, and multi-modal content is planned for future releases.
 
 ### Example Output
 
