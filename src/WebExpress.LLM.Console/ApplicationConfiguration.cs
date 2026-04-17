@@ -49,8 +49,9 @@ public sealed class ApplicationConfiguration
     public string TokenizerType { get; init; } = "byte";
 
     /// <summary>
-    /// Gets the path to the SentencePiece .model file, relative to the model directory.
-    /// Only used when <see cref="TokenizerType"/> is "sentencepiece".
+    /// Gets the path to the tokenizer model file, relative to the model directory.
+    /// For SentencePiece tokenizer type, this should point to the binary <c>tokenizer.model</c> file.
+    /// For Gemma tokenizer type, this should point to the <c>tokenizer.json</c> file.
     /// Defaults to "tokenizer.json" when not specified.
     /// </summary>
     public string TokenizerModelPath { get; init; } = "tokenizer.json";

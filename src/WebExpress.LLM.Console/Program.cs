@@ -54,6 +54,7 @@ internal class Program
         {
             "byte" => new ByteTokenizer(),
             "sentencepiece" => CreateSentencePieceTokenizer(config),
+            "gemma" => CreateGemmaTokenizer(config),
             _ => throw new InvalidOperationException($"Unsupported tokenizer type: {config.TokenizerType}")
         };
 
@@ -182,10 +183,8 @@ internal class Program
 
     /// <summary>
     /// Creates a <see cref="SentencePieceTokenizer"/> from the application configuration.
-    /// Tries <c>tokenizer.json</c> (HuggingFace tokenizers format) first because it is a reliable
-    /// JSON representation. Falls back to the binary SentencePiece <c>.model</c> file when
-    /// <c>tokenizer.json</c> is absent. In both cases, <c>tokenizer_config.json</c> is loaded
-    /// when present to supply special-token names and <c>add_bos_token</c>/<c>add_eos_token</c> flags.
+    /// Loads the binary SentencePiece <c>.model</c> file and optionally reads
+    /// <c>tokenizer_config.json</c> for special-token flags (<c>add_bos_token</c>/<c>add_eos_token</c>).
     /// </summary>
     private static SentencePieceTokenizer CreateSentencePieceTokenizer(ApplicationConfiguration config)
     {
@@ -200,20 +199,37 @@ internal class Program
             tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
         }
 
-        // Prefer tokenizer.json (HuggingFace tokenizers JSON format) — reliable and human-readable.
-        // Models like Gemma ship this file alongside tokenizer.model.
-        var tokenizerJsonPath = Path.Combine(modelDir, "tokenizer.json");
-
-        if (File.Exists(tokenizerJsonPath))
-        {
-            return SentencePieceTokenizer.FromTokenizerJson(tokenizerJsonPath, tokenizerConfig);
-        }
-
-        // Fall back to the SentencePiece binary .model file.
+        // Load the SentencePiece binary .model file.
         var spModelPath = Path.IsPathRooted(config.TokenizerModelPath)
             ? config.TokenizerModelPath
             : Path.Combine(modelDir, config.TokenizerModelPath);
 
         return SentencePieceTokenizer.FromModel(spModelPath, tokenizerConfig);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="GemmaTokenizer"/> from the application configuration.
+    /// Reads <c>tokenizer.json</c> (HuggingFace tokenizers format) and optionally reads
+    /// <c>tokenizer_config.json</c> for special-token names and <c>add_bos_token</c>/<c>add_eos_token</c> flags.
+    /// </summary>
+    private static GemmaTokenizer CreateGemmaTokenizer(ApplicationConfiguration config)
+    {
+        var modelDir = Path.Combine(config.ModelPath, config.ModelName);
+
+        // Load tokenizer_config.json when present (optional)
+        TokenizerConfiguration tokenizerConfig = null;
+        var tokenizerConfigPath = Path.Combine(modelDir, "tokenizer_config.json");
+
+        if (File.Exists(tokenizerConfigPath))
+        {
+            tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
+        }
+
+        // Load tokenizer.json (required for Gemma)
+        var tokenizerJsonPath = Path.IsPathRooted(config.TokenizerModelPath)
+            ? config.TokenizerModelPath
+            : Path.Combine(modelDir, config.TokenizerModelPath);
+
+        return GemmaTokenizer.FromTokenizerJson(tokenizerJsonPath, tokenizerConfig);
     }
 }
