@@ -210,7 +210,7 @@ public sealed class SafeTensorLoaderTests
         // sharded model where offsets are not reset to zero per shard).
         // The global base offset simulates that this shard's data starts at a
         // non-zero position in the overall concatenated weight data.
-        const long globalBase = 5_000_000_000L; // 5 GB global offset
+        const long globalBase = 5_000_000_000L; // ~4.66 GB global offset
 
         var expected1 = new float[] { 1.5f, 2.5f, 3.5f };
         var expected2 = new float[] { 10f, 20f };
