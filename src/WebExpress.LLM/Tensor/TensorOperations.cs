@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace WebExpress.LLM.Tensor;
 
@@ -458,6 +457,11 @@ public static class TensorOperations
         return new Tensor([seqLen, hiddenSize], result);
     }
 
+    /// <summary>
+    /// Converts the specified read-only list of integers to a new array.
+    /// </summary>
+    /// <param name="shape">The read-only list of integers to convert. Cannot be null.</param>
+    /// <returns>An array containing the elements of the specified list, in the same order.</returns>
     private static int[] ToIntArray(IReadOnlyList<int> shape)
     {
         var arr = new int[shape.Count];

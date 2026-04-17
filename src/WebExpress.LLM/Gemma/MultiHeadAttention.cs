@@ -186,6 +186,12 @@ public sealed class MultiHeadAttention
         return output;
     }
 
+    /// <summary>
+    /// Returns a new tensor with the rows and columns of the specified 2D tensor exchanged.
+    /// </summary>
+    /// <param name="t">The 2D tensor to transpose. Must have a rank of 2.</param>
+    /// <returns>A tensor representing the transposed version of the input tensor.</returns>
+    /// <exception cref="ArgumentException">Thrown if the input tensor does not have a rank of 2.</exception>
     private static Tensor.Tensor Transpose2D(Tensor.Tensor t)
     {
         if (t.Rank != 2) throw new ArgumentException("Transpose2D requires 2D tensor.");
