@@ -2,7 +2,7 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Tensor;
 
-public sealed class TensorOperationsTests
+public sealed class UnitTestTensorOperations
 {
     [Fact]
     public void MatMul_ShouldComputeCorrectProduct()

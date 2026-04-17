@@ -2,7 +2,7 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
-public sealed class GenerationConfigTests
+public sealed class UnitTestGenerationConfig
 {
     [Fact]
     public void CreateSamplingStrategy_WithoutParameters_ShouldReturnGreedySampling()

@@ -3,7 +3,7 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
-public sealed class FeedForwardTests
+public sealed class UnitTestFeedForward
 {
     [Fact]
     public void Forward_ShouldProduceCorrectOutputShape()

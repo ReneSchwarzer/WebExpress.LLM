@@ -2,7 +2,7 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Tensor;
 
-public sealed class TensorTests
+public sealed class UnitTestTensor
 {
     [Fact]
     public void Constructor_WithShape_ShouldCreateZeroFilledTensor()

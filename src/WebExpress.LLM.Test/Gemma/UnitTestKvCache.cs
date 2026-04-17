@@ -3,7 +3,7 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
-public sealed class KvCacheTests
+public sealed class UnitTestKvCache
 {
     [Fact]
     public void Constructor_ShouldCreateEmptyCache()

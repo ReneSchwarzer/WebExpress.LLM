@@ -3,7 +3,7 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
-public sealed class MultiHeadAttentionTests
+public sealed class UnitTestMultiHeadAttention
 {
     [Fact]
     public void Forward_ShouldProduceCorrectOutputShape()

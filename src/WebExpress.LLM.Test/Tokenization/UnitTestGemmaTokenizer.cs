@@ -2,7 +2,7 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Tokenization;
 
-public sealed class GemmaTokenizerTests
+public sealed class UnitTestGemmaTokenizer
 {
     /// <summary>
     /// Creates a simple test vocabulary and merge list for Gemma BPE testing.

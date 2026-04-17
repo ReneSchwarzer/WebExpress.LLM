@@ -2,7 +2,7 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
-public sealed class GreedySamplingTests
+public sealed class UnitTestGreedySampling
 {
     [Fact]
     public void Sample_ShouldSelectTokenWithHighestLogit()

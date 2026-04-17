@@ -363,10 +363,15 @@ public sealed class Tensor
         return a * -1.0f;
     }
 
-    // ---------------------------------------------------------------
-    // Private helpers
-    // ---------------------------------------------------------------
-
+    /// <summary>
+    /// Validates that the specified shape array is non-null, non-empty, and contains only positive integers.
+    /// </summary>
+    /// <param name="shape">
+    /// An array of integers representing the dimensions of a shape. Each element must be a positive integer.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown if the shape array is null, empty, or contains a non-positive value.
+    /// </exception>
     private static void ValidateShape(int[] shape)
     {
         if (shape == null || shape.Length == 0)
@@ -383,6 +388,15 @@ public sealed class Tensor
         }
     }
 
+    /// <summary>
+    /// Calculates the total number of elements represented by the specified shape dimensions.
+    /// </summary>
+    /// <param name="shape">
+    /// An array of integers specifying the size of each dimension. Each value must be greater than or equal to zero.
+    /// </param>
+    /// <returns>
+    /// The product of all dimension sizes in the shape array. Returns 1 if the array is empty.
+    /// </returns>
     private static int ComputeLength(int[] shape)
     {
         var length = 1;
@@ -455,6 +469,28 @@ public sealed class Tensor
         return new Tensor(outShape, outData, noCopy: true);
     }
 
+    /// <summary>
+    /// Determines the broadcast‑compatible shape of two arrays by combining their dimensions
+    /// according to standard broadcasting rules.
+    /// </summary>
+    /// <remarks>
+    /// The method follows the broadcasting rules used in numerical libraries such as NumPy.
+    /// Dimensions are compared from right to left; a dimension is considered compatible if it is
+    /// equal or if one of the values is 1.
+    /// </remarks>
+    /// <param name="a">
+    /// The first array of dimensions describing the shape of a tensor. All values must be greater than 0.
+    /// </param>
+    /// <param name="b">
+    /// The second array of dimensions describing the shape of a tensor. All values must be greater than 0.
+    /// </param>
+    /// <returns>
+    /// An array of integers representing the broadcasted shape of both inputs. Each dimension corresponds
+    /// to the maximum compatible size at that position.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the input shapes are not broadcast‑compatible.
+    /// </exception>
     private static int[] BroadcastShapes(int[] a, int[] b)
     {
         var maxRank = Math.Max(a.Length, b.Length);
@@ -477,6 +513,26 @@ public sealed class Tensor
         return result;
     }
 
+    /// <summary>
+    /// Computes the strides for an input array relative to an output shape in order to support broadcasting.
+    /// </summary>
+    /// <remarks>
+    /// The returned strides can be used to map indices from the broadcasted shape back to the
+    /// original input array. This is particularly useful when implementing array operations
+    /// that rely on broadcasting semantics.
+    /// </remarks>
+    /// <param name="shape">
+    /// The shape of the input array. Each element specifies the size of the corresponding
+    /// dimension. The array must contain at least as many dimensions as required for broadcasting.
+    /// </param>
+    /// <param name="outShape">
+    /// The desired shape after broadcasting. Each element specifies the size of the corresponding
+    /// dimension in the broadcasted representation.
+    /// </param>
+    /// <returns>
+    /// An array of integers representing the stride for each dimension in the broadcasted shape.
+    /// A value of 0 indicates that the corresponding dimension is broadcasted.
+    /// </returns>
     private static int[] ComputeBroadcastStrides(int[] shape, int[] outShape)
     {
         // Compute strides for shape relative to outShape for broadcasting

@@ -4,7 +4,7 @@ using WebExpress.LLM.Model;
 
 namespace WebExpress.LLM.Test.Model;
 
-public sealed class ModelConfigurationEosTokenIdTests
+public sealed class UnitTestModelConfigurationEosTokenId
 {
     [Fact]
     public void EosTokenId_ShouldDeserializeSingleInteger()

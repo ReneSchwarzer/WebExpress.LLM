@@ -2,7 +2,7 @@ using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Test.SafeTensors;
 
-public sealed class SafeTensorIndexTests
+public sealed class UnitTestSafeTensorIndex
 {
     [Fact]
     public void Parse_ShouldParseValidIndexJson()

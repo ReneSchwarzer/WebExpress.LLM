@@ -4,7 +4,7 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Chat;
 
-public sealed class ChatSessionTests
+public sealed class UnitTestChatSession
 {
     [Fact]
     public void Send_ShouldTrackConversationAndReturnAssistantMessage()

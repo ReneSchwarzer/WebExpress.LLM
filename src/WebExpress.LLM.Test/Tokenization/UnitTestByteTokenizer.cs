@@ -2,7 +2,7 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Tokenization;
 
-public sealed class ByteTokenizerTests
+public sealed class UnitTestByteTokenizer
 {
     [Fact]
     public void EncodeDecode_ShouldBeDeterministicAndReversible()

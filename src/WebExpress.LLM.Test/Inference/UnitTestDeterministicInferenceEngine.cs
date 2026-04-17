@@ -2,7 +2,7 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
-public sealed class DeterministicInferenceEngineTests
+public sealed class UnitTestDeterministicInferenceEngine
 {
     [Fact]
     public void GenerateTokens_ShouldReturnDeterministicSequence()

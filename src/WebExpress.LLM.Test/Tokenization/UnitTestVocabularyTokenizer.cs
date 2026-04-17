@@ -2,8 +2,16 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Tokenization;
 
-public sealed class VocabularyTokenizerTests
+/// <summary>
+/// Provides a collection of unit tests for the <see cref="VocabularyTokenizer"/> class,
+/// validating its encoding and decoding functionality as well as its error‑handling behavior.
+/// </summary>
+public sealed class UnitTestVocabularyTokenizer
 {
+    /// <summary>
+    /// Verifies that encoding and subsequently decoding a piece of text using a simple vocabulary
+    /// mapping is reversible.
+    /// </summary>
     [Fact]
     public void EncodeDecode_WithSimpleVocabulary_ShouldBeReversible()
     {
@@ -25,6 +33,10 @@ public sealed class VocabularyTokenizerTests
         Assert.Equal("Hello world", decoded);
     }
 
+    /// <summary>
+    /// Verifies that the Encode method assigns the unknown token ID when an input token is not present in the
+    /// vocabulary.
+    /// </summary>
     [Fact]
     public void Encode_WithUnknownToken_ShouldUseUnknownId()
     {
@@ -41,6 +53,10 @@ public sealed class VocabularyTokenizerTests
         Assert.Contains(1, tokens);
     }
 
+    /// <summary>
+    /// Verifies that the constructor of <see cref="VocabularyTokenizer"/> throws an
+    /// <see cref="ArgumentException"/> when an empty vocabulary is provided.
+    /// </summary>
     [Fact]
     public void Constructor_WithEmptyVocabulary_ShouldThrowArgumentException()
     {
@@ -49,6 +65,9 @@ public sealed class VocabularyTokenizerTests
         Assert.Throws<ArgumentException>(() => new VocabularyTokenizer(vocabulary));
     }
 
+    /// <summary>
+    /// Verifies that the Encode method returns an empty collection when provided with an empty string as input.
+    /// </summary>
     [Fact]
     public void Encode_WithEmptyString_ShouldReturnEmpty()
     {

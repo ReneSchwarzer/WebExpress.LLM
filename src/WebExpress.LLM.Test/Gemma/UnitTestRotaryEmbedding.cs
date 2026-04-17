@@ -2,7 +2,7 @@ using WebExpress.LLM.Gemma;
 
 namespace WebExpress.LLM.Test.Gemma;
 
-public sealed class RotaryEmbeddingTests
+public sealed class UnitTestRotaryEmbedding
 {
     [Fact]
     public void Constructor_NegativeTheta_ShouldThrow()

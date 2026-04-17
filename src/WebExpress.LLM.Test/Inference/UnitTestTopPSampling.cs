@@ -2,7 +2,7 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
-public sealed class TopPSamplingTests
+public sealed class UnitTestTopPSampling
 {
     [Fact]
     public void Sample_WithSeed_ShouldBeDeterministic()

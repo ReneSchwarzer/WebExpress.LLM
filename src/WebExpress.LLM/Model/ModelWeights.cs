@@ -10,30 +10,10 @@ namespace WebExpress.LLM.Model;
 /// </summary>
 public sealed class ModelWeights : IDisposable
 {
-    private const long TwoGigabytes = 2L * 1024 * 1024 * 1024;
-
-    private readonly byte[] _smallData;
     private readonly MemoryMappedFile _memoryMappedFile;
     private readonly MemoryMappedViewAccessor _accessor;
     private readonly long _length;
     private bool _disposed;
-
-    /// <summary>
-    /// Initializes a new instance of the ModelWeights class with the specified model data.
-    /// </summary>
-    /// <param name="data">
-    /// The byte array containing the model data. Must not be null.
-    /// </param>
-    /// <exception cref="ArgumentNullException">
-    /// Thrown when <paramref name="data"/> is null.
-    /// </exception>
-    private ModelWeights(byte[] data)
-    {
-        _smallData = data ?? throw new ArgumentNullException(nameof(data));
-        _memoryMappedFile = null;
-        _accessor = null;
-        _length = data.Length;
-    }
 
     /// <summary>
     /// Initializes a new instance of the ModelWeights class with the specified memory resources.
@@ -56,7 +36,6 @@ public sealed class ModelWeights : IDisposable
     {
         _memoryMappedFile = memoryMappedFile ?? throw new ArgumentNullException(nameof(memoryMappedFile));
         _accessor = accessor ?? throw new ArgumentNullException(nameof(accessor));
-        _smallData = null;
         _length = length;
     }
 
@@ -93,14 +72,6 @@ public sealed class ModelWeights : IDisposable
         var fileInfo = new FileInfo(filePath);
         var fileLength = fileInfo.Length;
 
-        // For files ≤2GB, use byte array for better performance
-        if (fileLength <= TwoGigabytes)
-        {
-            var data = File.ReadAllBytes(filePath);
-            return new ModelWeights(data);
-        }
-
-        // For files >2GB, use memory-mapped file
         var memoryMappedFile = MemoryMappedFile.CreateFromFile(
             filePath,
             FileMode.Open,
@@ -117,23 +88,6 @@ public sealed class ModelWeights : IDisposable
     }
 
     /// <summary>
-    /// Creates a ModelWeights instance from a byte array.
-    /// This method is primarily intended for testing purposes.
-    /// </summary>
-    /// <param name="data">The byte array containing weight data.</param>
-    /// <returns>A new ModelWeights instance.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if data is null.</exception>
-    public static ModelWeights FromByteArray(byte[] data)
-    {
-        if (data == null)
-        {
-            throw new ArgumentNullException(nameof(data));
-        }
-
-        return new ModelWeights(data);
-    }
-
-    /// <summary>
     /// Reads a byte from the weight data at the specified position.
     /// </summary>
     /// <param name="position">The position to read from.</param>
@@ -147,11 +101,6 @@ public sealed class ModelWeights : IDisposable
         if (position < 0 || position >= _length)
         {
             throw new ArgumentOutOfRangeException(nameof(position));
-        }
-
-        if (_smallData != null)
-        {
-            return _smallData[position];
         }
 
         return _accessor.ReadByte(position);
@@ -181,14 +130,7 @@ public sealed class ModelWeights : IDisposable
 
         var buffer = new byte[count];
 
-        if (_smallData != null)
-        {
-            Array.Copy(_smallData, position, buffer, 0, count);
-        }
-        else
-        {
-            _accessor.ReadArray(position, buffer, 0, count);
-        }
+        _accessor.ReadArray(position, buffer, 0, count);
 
         return buffer;
     }
@@ -202,12 +144,7 @@ public sealed class ModelWeights : IDisposable
     {
         ThrowIfDisposed();
 
-        if (_smallData != null)
-        {
-            return _smallData;
-        }
-
-        // For memory-mapped files, read all data into a byte array
+        // for memory-mapped files, read all data into a byte array
         var buffer = new byte[_length];
         _accessor.ReadArray(0, buffer, 0, (int)_length);
         return buffer;
@@ -223,15 +160,8 @@ public sealed class ModelWeights : IDisposable
             return;
         }
 
-        if (_accessor != null)
-        {
-            _accessor.Dispose();
-        }
-
-        if (_memoryMappedFile != null)
-        {
-            _memoryMappedFile.Dispose();
-        }
+        _accessor?.Dispose();
+        _memoryMappedFile?.Dispose();
 
         _disposed = true;
     }
