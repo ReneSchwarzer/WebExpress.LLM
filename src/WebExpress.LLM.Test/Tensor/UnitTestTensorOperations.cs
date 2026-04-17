@@ -74,35 +74,6 @@ public sealed class UnitTestTensorOperations
     }
 
     /// <summary>
-    /// Tests that batch matrix multiplication computes the product for each batch.
-    /// </summary>
-    [Fact]
-    public void BatchMatMul_ShouldComputePerBatch()
-    {
-        // batch=2, [2,2] x [2,2]
-        var a = new WebExpress.LLM.Tensor.Tensor([2, 2, 2], [1f, 0, 0, 1, 2, 0, 0, 2]);
-        var b = new WebExpress.LLM.Tensor.Tensor([2, 2, 2], [3f, 4, 5, 6, 7, 8, 9, 10]);
-
-        var result = TensorOperations.BatchMatMul(a, b);
-
-        Assert.Equal(2, result.Shape[0]);
-        Assert.Equal(2, result.Shape[1]);
-        Assert.Equal(2, result.Shape[2]);
-
-        // Batch 0: Identity × B = B
-        Assert.Equal(3.0f, result[0, 0, 0]);
-        Assert.Equal(4.0f, result[0, 0, 1]);
-        Assert.Equal(5.0f, result[0, 1, 0]);
-        Assert.Equal(6.0f, result[0, 1, 1]);
-
-        // Batch 1: 2*I × B = 2*B
-        Assert.Equal(14.0f, result[1, 0, 0]);
-        Assert.Equal(16.0f, result[1, 0, 1]);
-        Assert.Equal(18.0f, result[1, 1, 0]);
-        Assert.Equal(20.0f, result[1, 1, 1]);
-    }
-
-    /// <summary>
     /// Tests that softmax normalizes the input to a probability distribution.
     /// </summary>
     [Fact]

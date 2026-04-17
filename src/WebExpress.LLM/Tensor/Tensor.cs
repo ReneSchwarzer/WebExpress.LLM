@@ -18,6 +18,7 @@ public sealed class Tensor
 {
     private readonly float[] _data;
     private readonly int[] _shape;
+    private const int TileSize = 32;
 
     /// <summary>
     /// Initializes a new tensor with the specified shape, filled with zeros.
@@ -248,12 +249,20 @@ public sealed class Tensor
         var cols = _shape[1];
         var result = new float[rows * cols];
 
-        Parallel.For(0, rows, i =>
-        //for (var i = 0; i < rows; i++)
+        Parallel.For(0, (rows + TileSize - 1) / TileSize, blockIdx =>
         {
-            for (var j = 0; j < cols; j++)
+            int i0 = blockIdx * TileSize;
+            int iMax = Math.Min(i0 + TileSize, rows);
+            for (var j0 = 0; j0 < cols; j0 += TileSize)
             {
-                result[j * rows + i] = _data[i * cols + j];
+                var jMax = Math.Min(j0 + TileSize, cols);
+                for (var i = i0; i < iMax; i++)
+                {
+                    for (var j = j0; j < jMax; j++)
+                    {
+                        result[j * rows + i] = _data[i * cols + j];
+                    }
+                }
             }
         });
 
@@ -267,10 +276,6 @@ public sealed class Tensor
     {
         return new Tensor((int[])_shape.Clone(), (float[])_data.Clone(), noCopy: true);
     }
-
-    // ---------------------------------------------------------------
-    // Arithmetic operators
-    // ---------------------------------------------------------------
 
     /// <summary>
     /// Element-wise addition of two tensors with broadcasting support.
