@@ -52,8 +52,7 @@ public sealed class Tensor
         }
 
         _shape = (int[])shape.Clone();
-        //_data = (float[])data.Clone();
-        _data = data;
+        _data = (float[])data.Clone();
     }
 
     /// <summary>

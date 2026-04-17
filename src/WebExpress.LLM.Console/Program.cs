@@ -138,8 +138,8 @@ internal class Program
         while (true)
         {
             // prompt the user for input
-            System.Console.Write(">What is Gemma?\n");
-            var userInput = "What is Gemma?"; // System.Console.ReadLine("What is Gemma?");
+            System.Console.Write(">");
+            var userInput = System.Console.ReadLine();
 
             // check if the user wants to exit the application
             if (string.IsNullOrWhiteSpace(userInput))
