@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using WebExpress.LLM.Chat;
 using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Model;
@@ -104,10 +105,14 @@ public sealed class ModelLoader
         // Load weights using ModelWeights class which supports files larger than 2GB
         var weights = ModelWeights.FromFile(weightsPath);
 
+        // Load optional chat template
+        var chatTemplate = LoadChatTemplate(modelDirectory);
+
         return new ModelDefinition
         {
             Configuration = configuration,
-            Weights = weights
+            Weights = weights,
+            ChatTemplate = chatTemplate
         };
     }
 
@@ -137,10 +142,32 @@ public sealed class ModelLoader
         var index = SafeTensorIndex.FromFile(indexPath);
         var shardedLoader = new ShardedSafeTensorLoader(index, modelDirectory);
 
+        // Load optional chat template
+        var chatTemplate = LoadChatTemplate(modelDirectory);
+
         return new ModelDefinition
         {
             Configuration = configuration,
-            ShardedLoader = shardedLoader
+            ShardedLoader = shardedLoader,
+            ChatTemplate = chatTemplate
         };
+    }
+
+    /// <summary>
+    /// Attempts to load a chat template from the specified model directory.
+    /// </summary>
+    /// <param name="modelDirectory">
+    /// The path to the model directory that may contain a <c>chat_template.jinja</c> file.
+    /// </param>
+    /// <returns>
+    /// A <see cref="ChatTemplate"/> instance if the template file exists; otherwise <see langword="null"/>.
+    /// </returns>
+    private static ChatTemplate LoadChatTemplate(string modelDirectory)
+    {
+        var templatePath = Path.Combine(modelDirectory, ChatTemplate.DefaultFileName);
+
+        return File.Exists(templatePath)
+            ? ChatTemplate.FromFile(templatePath)
+            : null;
     }
 }

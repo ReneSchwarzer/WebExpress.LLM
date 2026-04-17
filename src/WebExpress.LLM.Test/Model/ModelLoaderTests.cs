@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using WebExpress.LLM.Chat;
 using WebExpress.LLM.Model;
 using WebExpress.LLM.SafeTensors;
 
@@ -640,6 +641,94 @@ public sealed class ModelLoaderTests
         File.WriteAllText(
             Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
             JsonSerializer.Serialize(configuration));
+    }
+
+    /// <summary>
+    /// Tests that the load method loads the chat template when the file is present.
+    /// </summary>
+    [Fact]
+    public void Load_WithChatTemplate_ShouldLoadTemplate()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            var configuration = new ModelConfiguration
+            {
+                ModelName = "gemma-4-mini",
+                VocabularySize = 256000,
+                ContextLength = 8192,
+                HiddenSize = 2048,
+                IntermediateSize = 8192,
+                NumberOfLayers = 18,
+                NumberOfAttentionHeads = 8,
+                NumberOfKeyValueHeads = 1,
+                HeadDimension = 256
+            };
+
+            File.WriteAllText(
+                Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
+                JsonSerializer.Serialize(configuration));
+            File.WriteAllBytes(Path.Combine(tempPath, ModelLoader.DefaultWeightsFileName), [1, 2, 3, 4]);
+            File.WriteAllText(
+                Path.Combine(tempPath, ChatTemplate.DefaultFileName),
+                "{# sample template #}");
+
+            var loader = new ModelLoader();
+            var model = loader.Load(tempPath);
+
+            Assert.NotNull(model.ChatTemplate);
+            Assert.Equal("{# sample template #}", model.ChatTemplate.TemplateContent);
+
+            model.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Tests that the load method sets ChatTemplate to null when no template file is present.
+    /// </summary>
+    [Fact]
+    public void Load_WithoutChatTemplate_ShouldSetTemplateNull()
+    {
+        var tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempPath);
+
+        try
+        {
+            var configuration = new ModelConfiguration
+            {
+                ModelName = "gemma-4-mini",
+                VocabularySize = 256000,
+                ContextLength = 8192,
+                HiddenSize = 2048,
+                IntermediateSize = 8192,
+                NumberOfLayers = 18,
+                NumberOfAttentionHeads = 8,
+                NumberOfKeyValueHeads = 1,
+                HeadDimension = 256
+            };
+
+            File.WriteAllText(
+                Path.Combine(tempPath, ModelLoader.DefaultConfigurationFileName),
+                JsonSerializer.Serialize(configuration));
+            File.WriteAllBytes(Path.Combine(tempPath, ModelLoader.DefaultWeightsFileName), [1, 2, 3, 4]);
+
+            var loader = new ModelLoader();
+            var model = loader.Load(tempPath);
+
+            Assert.Null(model.ChatTemplate);
+
+            model.Dispose();
+        }
+        finally
+        {
+            Directory.Delete(tempPath, recursive: true);
+        }
     }
 
     private static byte[] CreateSafeTensorsFile(

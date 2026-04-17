@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Tensor;
@@ -16,10 +15,7 @@ namespace WebExpress.LLM.Tensor;
 /// </remarks>
 public static class TensorOperations
 {
-    /// <summary>
-    /// The tile size used for cache-friendly loop blocking in matrix multiplication.
-    /// </summary>
-    private const int TileSize = 32;
+    private const int TileSize = 64;
 
     /// <summary>
     /// Performs matrix multiplication between two 2D tensors.
@@ -49,19 +45,6 @@ public static class TensorOperations
         }
 
         var result = new float[m * n];
-        MatMulCore(a.Data, b.Data, result, m, k, n);
-
-        return new Tensor([m, n], result);
-    }
-
-    /// <summary>
-    /// Core matrix multiplication kernel using loop tiling for cache-friendly access.
-    /// Computes C = A × B where A is [M, K] and B is [K, N], all in row-major order.
-    /// The i-k-j loop order ensures sequential reads of both A and B rows.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void MatMulCore(float[] aData, float[] bData, float[] result, int m, int k, int n)
-    {
         var vecWidth = Vector<float>.Count;
 
         Parallel.For(0, m, i =>
@@ -69,123 +52,32 @@ public static class TensorOperations
             var aRowOffset = i * k;
             var rRowOffset = i * n;
 
-            for (var kTile = 0; kTile < k; kTile += TileSize)
+            for (var p = 0; p < k; p++)
             {
-                var kEnd = Math.Min(kTile + TileSize, k);
+                var aVal = a.Data[aRowOffset + p];
+                if (aVal == 0f)
+                    continue;
 
-                for (var jTile = 0; jTile < n; jTile += TileSize)
+                var aVec = new Vector<float>(aVal);
+                var bRowOffset = p * n;
+
+                var j = 0;
+                for (; j <= n - vecWidth; j += vecWidth)
                 {
-                    var jEnd = Math.Min(jTile + TileSize, n);
+                    var bVec = new Vector<float>(b.Data, bRowOffset + j);
+                    var rVec = new Vector<float>(result, rRowOffset + j);
 
-                    for (var p = kTile; p < kEnd; p++)
-                    {
-                        var aVal = aData[aRowOffset + p];
-                        if (aVal == 0f)
-                            continue;
-
-                        var aVec = new Vector<float>(aVal);
-                        var bRowOffset = p * n;
-
-                        var j = jTile;
-                        for (; j <= jEnd - vecWidth; j += vecWidth)
-                        {
-                            var bVec = new Vector<float>(bData, bRowOffset + j);
-                            var rVec = new Vector<float>(result, rRowOffset + j);
-
-                            rVec += aVec * bVec;
-
-                            rVec.CopyTo(result, rRowOffset + j);
-                        }
-
-                        for (; j < jEnd; j++)
-                        {
-                            result[rRowOffset + j] += aVal * bData[bRowOffset + j];
-                        }
-                    }
+                    rVec += aVec * bVec;
+                    rVec.CopyTo(result, rRowOffset + j);
                 }
-            }
-        });
-    }
-
-    /// <summary>
-    /// Performs batched matrix multiplication between two 3D tensors.
-    /// </summary>
-    /// <param name="a">Left operand with shape [batch, M, K].</param>
-    /// <param name="b">Right operand with shape [batch, K, N].</param>
-    /// <returns>A new tensor with shape [batch, M, N].</returns>
-    public static Tensor BatchMatMul(Tensor a, Tensor b)
-    {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(b);
-
-        if (a.Rank != 3 || b.Rank != 3)
-        {
-            throw new ArgumentException("BatchMatMul requires 3D tensors.");
-        }
-
-        if (a.Shape[0] != b.Shape[0])
-        {
-            throw new ArgumentException("Batch dimensions must match.");
-        }
-
-        if (a.Shape[2] != b.Shape[1])
-        {
-            throw new ArgumentException("Inner dimensions must match for BatchMatMul.");
-        }
-
-        var batch = a.Shape[0];
-        var m = a.Shape[1];
-        var k = a.Shape[2];
-        var n = b.Shape[2];
-
-        var result = new float[batch * m * n];
-        var aData = a.Data;
-        var bData = b.Data;
-
-        var aSliceSize = m * k;
-        var bSliceSize = k * n;
-        var rSliceSize = m * n;
-
-        Parallel.For(0, batch, bIdx =>
-        {
-            var aOffset = bIdx * aSliceSize;
-            var bOffset = bIdx * bSliceSize;
-            var rOffset = bIdx * rSliceSize;
-
-            for (var iTile = 0; iTile < m; iTile += TileSize)
-            {
-                var iEnd = Math.Min(iTile + TileSize, m);
-
-                for (var kTile = 0; kTile < k; kTile += TileSize)
+                for (; j < n; j++)
                 {
-                    var kEnd = Math.Min(kTile + TileSize, k);
-
-                    for (var jTile = 0; jTile < n; jTile += TileSize)
-                    {
-                        var jEnd = Math.Min(jTile + TileSize, n);
-
-                        for (var i = iTile; i < iEnd; i++)
-                        {
-                            var aRowOffset = aOffset + i * k;
-                            var rRowOffset = rOffset + i * n;
-
-                            for (var p = kTile; p < kEnd; p++)
-                            {
-                                var aVal = aData[aRowOffset + p];
-                                var bRowOffset = bOffset + p * n;
-
-                                for (var j = jTile; j < jEnd; j++)
-                                {
-                                    result[rRowOffset + j] += aVal * bData[bRowOffset + j];
-                                }
-                            }
-                        }
-                    }
+                    result[rRowOffset + j] += aVal * b.Data[bRowOffset + j];
                 }
             }
         });
 
-        return new Tensor([batch, m, n], result);
+        return new Tensor([m, n], result);
     }
 
     /// <summary>

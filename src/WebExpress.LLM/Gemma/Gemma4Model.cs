@@ -53,6 +53,8 @@ public sealed class Gemma4Model
     /// <returns>An array of logit values, one per vocabulary entry.</returns>
     public float[] Forward(int[] tokenIds)
     {
+        //System.Console.WriteLine($"Gemma4Model.Forward");
+
         ArgumentNullException.ThrowIfNull(tokenIds);
 
         if (tokenIds.Length == 0)
@@ -121,6 +123,7 @@ public sealed class Gemma4Model
         int numQueryHeads, int numKvHeads, int headDim, float rmsEps)
     {
         var prefix = $"model.language_model.layers.{layerIndex}";
+        //System.Console.WriteLine($"Gemma4Model.TransformerLayer {prefix}");
 
         // Determine attention type for this layer
         var layerTypes = _config.TextConfig?.LayerTypes;

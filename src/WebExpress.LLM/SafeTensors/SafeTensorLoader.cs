@@ -25,6 +25,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
 {
     private readonly ModelWeights _weights;
     private readonly Dictionary<string, TensorMetadata> _metadata;
+    private readonly Dictionary<string, Tensor.Tensor> _cache;
     private readonly long _dataOffset;
     private long _baseOffset;
 
@@ -38,6 +39,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     {
         _weights = weights ?? throw new ArgumentNullException(nameof(weights));
         _metadata = [];
+        _cache = new Dictionary<string, Tensor.Tensor>(StringComparer.Ordinal);
 
         if (weights.Length < 8)
         {
@@ -112,12 +114,19 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
 
     /// <summary>
     /// Loads a tensor as a float array, converting from the stored data type if necessary.
+    /// The result is cached so that repeated calls for the same tensor name return the
+    /// previously loaded <see cref="Tensor.Tensor"/> without re-reading from storage.
     /// </summary>
     /// <param name="name">The name of the tensor to load.</param>
     /// <returns>A <see cref="Tensor.Tensor"/> containing the tensor data as float32.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the tensor name is not found.</exception>
     public Tensor.Tensor LoadTensor(string name)
     {
+        if (_cache.TryGetValue(name, out var cached))
+        {
+            return cached;
+        }
+
         var meta = GetMetadata(name);
         var begin = meta.DataOffsets[0];
         var end = meta.DataOffsets[1];
@@ -133,7 +142,12 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
             shape[i] = (int)meta.Shape[i];
         }
 
-        return new Tensor.Tensor(shape, floats);
+        var tensor = new Tensor.Tensor(shape, floats);
+        _cache[name] = tensor;
+
+        //System.Console.WriteLine($"Loaded tensor '{name}' with shape [{string.Join(", ", shape)}] and dtype {meta.Dtype}.");
+
+        return tensor;
     }
 
     /// <summary>

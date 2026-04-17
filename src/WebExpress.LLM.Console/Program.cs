@@ -129,7 +129,7 @@ internal class Program
         var maxNewTokens = config.MaxNewTokens;
 
         // create a new chat session with the configured tokenizer and inference engine
-        var chatSession = new ChatSession(tokenizer, inferenceEngine);
+        var chatSession = new ChatSession(tokenizer, inferenceEngine, model.ChatTemplate);
 
         System.Console.WriteLine("Chat session started. Type 'exit' or 'quit' to end the session.");
         System.Console.WriteLine();

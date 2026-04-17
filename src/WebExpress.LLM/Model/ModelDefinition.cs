@@ -1,4 +1,5 @@
 using System;
+using WebExpress.LLM.Chat;
 using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Model;
@@ -26,6 +27,16 @@ public sealed class ModelDefinition : IDisposable
     /// across multiple shard files. This is null for non-sharded models.
     /// </summary>
     public ShardedSafeTensorLoader ShardedLoader { get; init; }
+
+    /// <summary>
+    /// Gets the chat template loaded from the model directory, or <see langword="null"/>
+    /// if no <c>chat_template.jinja</c> file was present.
+    /// </summary>
+    /// <remarks>
+    /// When available, this template defines how conversation messages are formatted into
+    /// model-specific prompt strings using turn-based special tokens.
+    /// </remarks>
+    public ChatTemplate ChatTemplate { get; init; }
 
     /// <summary>
     /// Disposes the ModelDefinition and releases associated resources.
