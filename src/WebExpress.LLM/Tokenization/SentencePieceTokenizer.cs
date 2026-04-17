@@ -277,25 +277,49 @@ public sealed class SentencePieceTokenizer : ITokenizer
             throw new InvalidDataException("tokenizer.json contains no vocabulary entries.");
         }
 
-        // Read merge rules ("left right" strings → (left, right) tuples)
+        // Read merge rules.
+        // HuggingFace tokenizer.json uses two formats:
+        //   • String format: "a b"  (e.g. GPT-2, LLaMA)
+        //   • Array format:  ["a", "b"]  (e.g. Gemma)
+        // Both are handled here.
         var mergePairs = new List<(string, string)>();
 
         if (modelElement.TryGetProperty("merges", out var mergesElement))
         {
             foreach (var m in mergesElement.EnumerateArray())
             {
-                var s = m.GetString();
-
-                if (string.IsNullOrEmpty(s))
+                if (m.ValueKind == JsonValueKind.Array)
                 {
-                    continue;
+                    // Array format: ["left", "right"]
+                    var enumerator = m.EnumerateArray();
+
+                    if (!enumerator.MoveNext()) { continue; }
+                    var left = enumerator.Current.GetString();
+
+                    if (!enumerator.MoveNext()) { continue; }
+                    var right = enumerator.Current.GetString();
+
+                    if (!string.IsNullOrEmpty(left) && !string.IsNullOrEmpty(right))
+                    {
+                        mergePairs.Add((left, right));
+                    }
                 }
-
-                var parts = s.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-
-                if (parts.Length == 2)
+                else if (m.ValueKind == JsonValueKind.String)
                 {
-                    mergePairs.Add((parts[0], parts[1]));
+                    // String format: "left right"
+                    var s = m.GetString();
+
+                    if (string.IsNullOrEmpty(s))
+                    {
+                        continue;
+                    }
+
+                    var parts = s.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+
+                    if (parts.Length == 2)
+                    {
+                        mergePairs.Add((parts[0], parts[1]));
+                    }
                 }
             }
         }

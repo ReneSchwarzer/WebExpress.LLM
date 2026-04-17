@@ -419,6 +419,65 @@ public sealed class SentencePieceTokenizerTests
     }
 
     [Fact]
+    public void FromTokenizerJson_WithArrayMerges_ShouldCreateFunctionalTokenizer()
+    {
+        var tempFile = Path.GetTempFileName();
+
+        try
+        {
+            // Simulates Gemma-style tokenizer.json where merges are arrays ["left", "right"],
+            // not space-separated strings "left right".
+            var json = """
+            {
+                "version": "1.0",
+                "model": {
+                    "type": "BPE",
+                    "unk_token": "<unk>",
+                    "vocab": {
+                        "<unk>": 0,
+                        "<bos>": 1,
+                        "<eos>": 2,
+                        "\u2581": 3,
+                        "a": 4,
+                        "b": 5,
+                        "ab": 6,
+                        "\u2581a": 7,
+                        "\u2581ab": 8
+                    },
+                    "merges": [
+                        ["a", "b"],
+                        ["\u2581", "a"],
+                        ["\u2581a", "b"]
+                    ]
+                }
+            }
+            """;
+
+            File.WriteAllText(tempFile, json);
+
+            var config = TokenizerConfiguration.FromJson("""
+            {
+                "bos_token": "<bos>",
+                "eos_token": "<eos>",
+                "unk_token": "<unk>",
+                "add_bos_token": false,
+                "add_eos_token": false
+            }
+            """);
+
+            var tokenizer = SentencePieceTokenizer.FromTokenizerJson(tempFile, config);
+            var tokens = tokenizer.Encode("ab");
+
+            // "ab" → ▁ab (ID 8)
+            Assert.Contains(8, tokens);
+        }
+        finally
+        {
+            File.Delete(tempFile);
+        }
+    }
+
+    [Fact]
     public void FromTokenizerJson_WithCustomBosEosTokenNames_ShouldResolveFromConfig()
     {
         var tempFile = Path.GetTempFileName();
