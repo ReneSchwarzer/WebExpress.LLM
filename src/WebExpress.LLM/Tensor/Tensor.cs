@@ -52,7 +52,8 @@ public sealed class Tensor
         }
 
         _shape = (int[])shape.Clone();
-        _data = (float[])data.Clone();
+        //_data = (float[])data.Clone();
+        _data = data;
     }
 
     /// <summary>
@@ -422,10 +423,11 @@ public sealed class Tensor
         {
             var result = new float[a._data.Length];
 
-            for (var i = 0; i < result.Length; i++)
+            Parallel.For(0, result.Length, i =>
+            //for (var i = 0; i < result.Length; i++)
             {
                 result[i] = op(a._data[i], b._data[i]);
-            }
+            });
 
             return new Tensor((int[])a._shape.Clone(), result, noCopy: true);
         }

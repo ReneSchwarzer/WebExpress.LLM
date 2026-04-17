@@ -15,14 +15,13 @@ namespace WebExpress.LLM.Gemma;
 /// </remarks>
 public sealed class KvCache
 {
-    private readonly Dictionary<int, (Tensor.Tensor Keys, Tensor.Tensor Values)> _cache;
+    private readonly Dictionary<int, (Tensor.Tensor Keys, Tensor.Tensor Values)> _cache = [];
 
     /// <summary>
     /// Initializes a new empty KV cache.
     /// </summary>
     public KvCache()
     {
-        _cache = new Dictionary<int, (Tensor.Tensor, Tensor.Tensor)>();
     }
 
     /// <summary>

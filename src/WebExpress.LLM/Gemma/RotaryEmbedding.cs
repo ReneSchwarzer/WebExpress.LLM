@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Gemma;
 
@@ -144,7 +145,8 @@ public sealed class RotaryEmbedding
 
         var result = input.Clone();
 
-        for (var h = 0; h < numHeads; h++)
+        Parallel.For(0, numHeads, h =>
+        //for (var h = 0; h < numHeads; h++)
         {
             for (var pos = 0; pos < seqLen; pos++)
             {
@@ -164,7 +166,7 @@ public sealed class RotaryEmbedding
                     result[h, pos, i + 1] = x0 * sin + x1 * cos;
                 }
             }
-        }
+        });
 
         return result;
     }

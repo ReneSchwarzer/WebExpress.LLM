@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Gemma;
@@ -320,7 +321,8 @@ public sealed class MultiHeadAttention
         var scores = new float[numHeads * queryLen * kvLen];
         var scale = 1.0f / MathF.Sqrt(dotDim);
 
-        for (var h = 0; h < numHeads; h++)
+        Parallel.For(0, numHeads, h =>
+        //for (var h = 0; h < numHeads; h++)
         {
             var qOffset = h * queryLen * qHeadDim;
             var kOffset = h * kvLen * kHeadDim;
@@ -340,7 +342,7 @@ public sealed class MultiHeadAttention
                     scores[sOffset + i * kvLen + j] = dot * scale;
                 }
             }
-        }
+        });
 
         return new Tensor.Tensor([numHeads, queryLen, kvLen], scores);
     }

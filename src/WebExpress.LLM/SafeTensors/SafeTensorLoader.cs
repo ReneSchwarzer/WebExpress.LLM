@@ -133,6 +133,8 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
             shape[i] = (int)meta.Shape[i];
         }
 
+        System.Console.WriteLine($"Loaded tensor '{name}' with shape [{string.Join(", ", shape)}] and dtype '{meta.Dtype}'.");
+
         return new Tensor.Tensor(shape, floats);
     }
 

@@ -129,7 +129,7 @@ internal class Program
         var maxNewTokens = config.MaxNewTokens;
 
         // create a new chat session with the configured tokenizer and inference engine
-        var chatSession = new ChatSession(tokenizer, inferenceEngine);
+        var chatSession = new ChatSession(tokenizer, inferenceEngine, model.ChatTemplate);
 
         System.Console.WriteLine("Chat session started. Type 'exit' or 'quit' to end the session.");
         System.Console.WriteLine();
@@ -138,8 +138,8 @@ internal class Program
         while (true)
         {
             // prompt the user for input
-            System.Console.Write(">");
-            var userInput = System.Console.ReadLine();
+            System.Console.Write(">What is Gemma?\n");
+            var userInput = "What is Gemma?"; // System.Console.ReadLine("What is Gemma?");
 
             // check if the user wants to exit the application
             if (string.IsNullOrWhiteSpace(userInput))
