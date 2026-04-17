@@ -203,6 +203,47 @@ public sealed class SafeTensorLoaderTests
         Assert.Throws<NotSupportedException>(() => meta.BytesPerElement);
     }
 
+    [Fact]
+    public void LoadTensor_WithGlobalDataOffsets_ShouldNormalizeAndLoadCorrectly()
+    {
+        // Simulate a shard file whose header contains global offsets (e.g. from a
+        // sharded model where offsets are not reset to zero per shard).
+        // The global base offset simulates that this shard's data starts at a
+        // non-zero position in the overall concatenated weight data.
+        const long globalBase = 5_000_000_000L; // 5 GB global offset
+
+        var expected1 = new float[] { 1.5f, 2.5f, 3.5f };
+        var expected2 = new float[] { 10f, 20f };
+
+        var rawTensors = new Dictionary<string, (string dtype, long[] shape, byte[] data)>();
+
+        foreach (var (name, values) in new[] { ("weight_a", expected1), ("weight_b", expected2) })
+        {
+            var rawData = new byte[values.Length * 4];
+            for (var i = 0; i < values.Length; i++)
+            {
+                BinaryPrimitives.WriteSingleLittleEndian(rawData.AsSpan(i * 4), values[i]);
+            }
+            rawTensors[name] = ("F32", new long[] { values.Length }, rawData);
+        }
+
+        var bytes = CreateSafeTensorsFileRaw(rawTensors, globalBaseOffset: globalBase);
+
+        var weights = ModelWeights.FromByteArray(bytes);
+        var loader = new SafeTensorLoader(weights);
+
+        var tensorA = loader.LoadTensor("weight_a");
+        Assert.Equal(3, tensorA.Shape[0]);
+        Assert.Equal(1.5f, tensorA[0], 1e-6f);
+        Assert.Equal(2.5f, tensorA[1], 1e-6f);
+        Assert.Equal(3.5f, tensorA[2], 1e-6f);
+
+        var tensorB = loader.LoadTensor("weight_b");
+        Assert.Equal(2, tensorB.Shape[0]);
+        Assert.Equal(10f, tensorB[0], 1e-6f);
+        Assert.Equal(20f, tensorB[1], 1e-6f);
+    }
+
     // ---------------------------------------------------------------
     // Helper: creates a valid SafeTensors file from F32 tensors
     // ---------------------------------------------------------------
@@ -227,11 +268,12 @@ public sealed class SafeTensorLoaderTests
     }
 
     private static byte[] CreateSafeTensorsFileRaw(
-        Dictionary<string, (string dtype, long[] shape, byte[] data)> tensors)
+        Dictionary<string, (string dtype, long[] shape, byte[] data)> tensors,
+        long globalBaseOffset = 0)
     {
         // Build header JSON
         var header = new Dictionary<string, object>();
-        long currentOffset = 0;
+        long currentOffset = globalBaseOffset;
 
         foreach (var (name, (dtype, shape, data)) in tensors)
         {

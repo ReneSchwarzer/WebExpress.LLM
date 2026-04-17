@@ -25,6 +25,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     private readonly ModelWeights _weights;
     private readonly Dictionary<string, TensorMetadata> _metadata;
     private readonly long _dataOffset;
+    private readonly long _baseOffset;
 
     /// <summary>
     /// Initializes a new SafeTensorLoader by parsing the header from the provided model weights.
@@ -59,6 +60,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         ParseHeader(headerJson);
 
         _dataOffset = 8 + headerLength;
+        _baseOffset = ComputeBaseOffset();
     }
 
     /// <summary>
@@ -102,7 +104,7 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         var begin = meta.DataOffsets[0];
         var end = meta.DataOffsets[1];
         var byteCount = (int)(end - begin);
-        var rawBytes = _weights.ReadBytes(_dataOffset + begin, byteCount);
+        var rawBytes = _weights.ReadBytes(_dataOffset + begin - _baseOffset, byteCount);
 
         var floats = ConvertToFloat32(rawBytes, meta.Dtype);
 
@@ -319,5 +321,26 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
                 DataOffsets = offsets
             };
         }
+    }
+
+    /// <summary>
+    /// Computes the minimum data offset across all tensors in this file.
+    /// Some sharded SafeTensors files store global offsets rather than per-shard-local offsets.
+    /// This base offset is subtracted when reading tensor data to normalize the access.
+    /// </summary>
+    /// <returns>The minimum begin offset, or 0 if no tensors are present.</returns>
+    private long ComputeBaseOffset()
+    {
+        var minOffset = long.MaxValue;
+
+        foreach (var meta in _metadata.Values)
+        {
+            if (meta.DataOffsets.Count >= 2 && meta.DataOffsets[0] < minOffset)
+            {
+                minOffset = meta.DataOffsets[0];
+            }
+        }
+
+        return minOffset == long.MaxValue ? 0 : minOffset;
     }
 }
