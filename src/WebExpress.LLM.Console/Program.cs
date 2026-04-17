@@ -53,6 +53,7 @@ internal class Program
         ITokenizer tokenizer = config.TokenizerType.ToLowerInvariant() switch
         {
             "byte" => new ByteTokenizer(),
+            "sentencepiece" => CreateSentencePieceTokenizer(config),
             _ => throw new InvalidOperationException($"Unsupported tokenizer type: {config.TokenizerType}")
         };
 
@@ -177,5 +178,32 @@ internal class Program
         model?.Dispose();
 
         return 0;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SentencePieceTokenizer"/> from the application configuration.
+    /// Resolves the .model file path relative to the model directory and optionally loads
+    /// <c>tokenizer_config.json</c> from the same directory to configure special token behavior.
+    /// </summary>
+    private static SentencePieceTokenizer CreateSentencePieceTokenizer(ApplicationConfiguration config)
+    {
+        var modelDir = Path.Combine(config.ModelPath, config.ModelName);
+
+        // Resolve the .model file path: if it is already absolute use it as-is,
+        // otherwise treat it as relative to the model directory.
+        var spModelPath = Path.IsPathRooted(config.TokenizerModelPath)
+            ? config.TokenizerModelPath
+            : Path.Combine(modelDir, config.TokenizerModelPath);
+
+        // Load tokenizer_config.json when present (optional)
+        TokenizerConfiguration tokenizerConfig = null;
+        var tokenizerConfigPath = Path.Combine(modelDir, "tokenizer_config.json");
+
+        if (File.Exists(tokenizerConfigPath))
+        {
+            tokenizerConfig = TokenizerConfiguration.FromFile(tokenizerConfigPath);
+        }
+
+        return SentencePieceTokenizer.FromModel(spModelPath, tokenizerConfig);
     }
 }

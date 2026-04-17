@@ -70,6 +70,7 @@ public sealed class ConfigurationLoader
             // Load tokenizer configuration (optional)
             var tokenizerElement = root.Element("tokenizer");
             var tokenizerType = tokenizerElement?.Attribute("type")?.Value ?? "byte";
+            var tokenizerModelPath = tokenizerElement?.Attribute("modelPath")?.Value ?? "tokenizer.model";
 
             // Load runtime configuration (optional)
             var runtimeElement = root.Element("runtime");
@@ -85,6 +86,7 @@ public sealed class ConfigurationLoader
                 TopP = topP,
                 Seed = seed,
                 TokenizerType = tokenizerType,
+                TokenizerModelPath = tokenizerModelPath,
                 UseDeterministicEngine = useDeterministicEngine
             };
         }

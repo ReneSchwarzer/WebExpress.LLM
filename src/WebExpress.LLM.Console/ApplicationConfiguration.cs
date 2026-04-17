@@ -44,9 +44,16 @@ public sealed class ApplicationConfiguration
     public int? Seed { get; init; }
 
     /// <summary>
-    /// Gets the tokenizer type to use (e.g., "byte", "vocabulary").
+    /// Gets the tokenizer type to use (e.g., "byte", "sentencepiece").
     /// </summary>
     public string TokenizerType { get; init; } = "byte";
+
+    /// <summary>
+    /// Gets the path to the SentencePiece .model file, relative to the model directory.
+    /// Only used when <see cref="TokenizerType"/> is "sentencepiece".
+    /// Defaults to "tokenizer.model" when not specified.
+    /// </summary>
+    public string TokenizerModelPath { get; init; } = "tokenizer.model";
 
     /// <summary>
     /// Gets a value indicating whether to use deterministic inference engine for testing.

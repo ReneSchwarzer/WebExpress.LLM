@@ -24,6 +24,9 @@
 	</inference>
 
 	<!-- Tokenizer configuration: defines how text is converted to tokens -->
+	<!-- type="byte"          : simple byte-level tokenizer (default) -->
+	<!-- type="sentencepiece" : SentencePiece BPE tokenizer; set modelPath to the .model file -->
+	<!--                        relative to the model directory, e.g. modelPath="tokenizer.model" -->
 	<tokenizer type="byte" />
 
 	<!-- Runtime configuration: controls application behavior -->
