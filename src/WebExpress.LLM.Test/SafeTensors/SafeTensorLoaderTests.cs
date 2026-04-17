@@ -244,6 +244,49 @@ public sealed class SafeTensorLoaderTests
         Assert.Equal(20f, tensorB[1], 1e-6f);
     }
 
+    [Fact]
+    public void LoadTensor_WithGlobalOffsetsAndZeroSizeTensor_ShouldNormalizeCorrectly()
+    {
+        // Reproduce the bug where a zero-size tensor with data_offsets [0, 0]
+        // poisons the ComputeBaseOffset minimum to 0, preventing normalization
+        // of global offsets for the other tensors.
+        const long globalBase = 3_000_000_000L;
+
+        var expectedA = new float[] { 7f, 8f, 9f };
+        var rawA = new byte[expectedA.Length * 4];
+
+        for (var i = 0; i < expectedA.Length; i++)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(rawA.AsSpan(i * 4), expectedA[i]);
+        }
+
+        // Build header JSON manually so we can inject a zero-size placeholder tensor.
+        var headerEntries = new Dictionary<string, object>
+        {
+            // Zero-size placeholder tensor with offsets [0, 0] (e.g. an MoE routing table stub)
+            ["placeholder"] = new { dtype = "F32", shape = Array.Empty<long>(), data_offsets = new long[] { 0, 0 } },
+            // Real tensor with global offsets
+            ["real_weight"] = new { dtype = "F32", shape = new long[] { expectedA.Length }, data_offsets = new long[] { globalBase, globalBase + rawA.Length } }
+        };
+
+        var headerJson = JsonSerializer.Serialize(headerEntries);
+        var headerBytes = Encoding.UTF8.GetBytes(headerJson);
+        var result = new byte[8 + headerBytes.Length + rawA.Length];
+
+        BinaryPrimitives.WriteInt64LittleEndian(result, headerBytes.Length);
+        Array.Copy(headerBytes, 0, result, 8, headerBytes.Length);
+        Array.Copy(rawA, 0, result, 8 + headerBytes.Length, rawA.Length);
+
+        var weights = ModelWeights.FromByteArray(result);
+        var loader = new SafeTensorLoader(weights);
+
+        var tensor = loader.LoadTensor("real_weight");
+        Assert.Equal(3, tensor.Shape[0]);
+        Assert.Equal(7f, tensor[0], 1e-6f);
+        Assert.Equal(8f, tensor[1], 1e-6f);
+        Assert.Equal(9f, tensor[2], 1e-6f);
+    }
+
     // ---------------------------------------------------------------
     // Helper: creates a valid SafeTensors file from F32 tensors
     // ---------------------------------------------------------------

@@ -324,23 +324,49 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     }
 
     /// <summary>
-    /// Computes the minimum data offset across all tensors in this file.
-    /// Some sharded SafeTensors files store global offsets rather than per-shard-local offsets.
-    /// This base offset is subtracted when reading tensor data to normalize the access.
+    /// Computes the base data offset for this file.
+    /// Some sharded SafeTensors files store global offsets (relative to the concatenated
+    /// weight data across all shards) rather than per-shard-local offsets.
+    /// When global offsets are detected, this method returns the minimum begin offset of
+    /// non-empty tensors so that reads can be normalized to the shard's local data section.
     /// </summary>
-    /// <returns>The minimum begin offset, or 0 if no tensors are present.</returns>
+    /// <returns>
+    /// The base offset to subtract from tensor data offsets, or 0 when offsets are already local.
+    /// </returns>
     private long ComputeBaseOffset()
     {
+        var dataSize = _weights.Length - _dataOffset;
+        long maxEnd = 0;
         var minOffset = long.MaxValue;
 
         foreach (var meta in _metadata.Values)
         {
-            if (meta.DataOffsets.Count >= 2 && meta.DataOffsets[0] < minOffset)
+            if (meta.DataOffsets.Count < 2)
+            {
+                continue;
+            }
+
+            if (meta.DataOffsets[1] > maxEnd)
+            {
+                maxEnd = meta.DataOffsets[1];
+            }
+
+            // Only consider tensors with actual data for the minimum offset calculation.
+            // Zero-size tensors (e.g. [0, 0] placeholders) are excluded because their
+            // offsets do not reflect the shard's true position in the global address space.
+            if (meta.DataOffsets[1] > meta.DataOffsets[0] && meta.DataOffsets[0] < minOffset)
             {
                 minOffset = meta.DataOffsets[0];
             }
         }
 
+        // If all offsets fit within the local data section, no adjustment is needed.
+        if (maxEnd <= dataSize)
+        {
+            return 0;
+        }
+
+        // Offsets are global; return the minimum non-empty begin offset as the base.
         return minOffset == long.MaxValue ? 0 : minOffset;
     }
 }
