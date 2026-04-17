@@ -2,8 +2,14 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
+/// <summary>
+/// Provides unit tests for the TopPSampling strategy, ensuring correct nucleus sampling behavior.
+/// </summary>
 public sealed class UnitTestTopPSampling
 {
+    /// <summary>
+    /// Tests that top-p sampling with a seed is deterministic.
+    /// </summary>
     [Fact]
     public void Sample_WithSeed_ShouldBeDeterministic()
     {
@@ -17,6 +23,9 @@ public sealed class UnitTestTopPSampling
         Assert.Equal(first, second);
     }
 
+    /// <summary>
+    /// Tests that top-p sampling only selects from the nucleus of tokens.
+    /// </summary>
     [Fact]
     public void Sample_ShouldSelectFromNucleus()
     {
@@ -34,6 +43,9 @@ public sealed class UnitTestTopPSampling
         Assert.True(results.All(r => r >= 0 && r < logits.Length));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the p value is invalid.
+    /// </summary>
     [Fact]
     public void Constructor_WithInvalidP_ShouldThrowArgumentOutOfRangeException()
     {

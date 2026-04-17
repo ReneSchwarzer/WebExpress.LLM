@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using WebExpress.LLM.Model;
 
 namespace WebExpress.LLM.SafeTensors;
@@ -229,13 +230,14 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         var count = bytes.Length / 2;
         var result = new float[count];
 
-        for (var i = 0; i < count; i++)
+        Parallel.For(0, count, i =>
+        //for (var i = 0; i < count; i++)
         {
             var bfBits = BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(i * 2));
             // BFloat16 is simply the upper 16 bits of a float32
             var floatBits = (uint)bfBits << 16;
             result[i] = BitConverter.Int32BitsToSingle((int)floatBits);
-        }
+        });
 
         return result;
     }

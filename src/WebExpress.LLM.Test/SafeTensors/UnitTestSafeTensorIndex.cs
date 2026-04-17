@@ -2,8 +2,14 @@ using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Test.SafeTensors;
 
+/// <summary>
+/// Provides unit tests for the SafeTensorIndex class, ensuring correct parsing and mapping of sharded tensor files.
+/// </summary>
 public sealed class UnitTestSafeTensorIndex
 {
+    /// <summary>
+    /// Tests that a valid index JSON can be parsed.
+    /// </summary>
     [Fact]
     public void Parse_ShouldParseValidIndexJson()
     {
@@ -32,6 +38,9 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Contains("model-00002-of-00002.safetensors", index.ShardFiles);
     }
 
+    /// <summary>
+    /// Tests that tensors are mapped to the correct shards.
+    /// </summary>
     [Fact]
     public void Parse_ShouldMapTensorsToCorrectShards()
     {
@@ -65,6 +74,9 @@ public sealed class UnitTestSafeTensorIndex
             index.WeightMap["model.language_model.lm_head.weight"]);
     }
 
+    /// <summary>
+    /// Tests that missing metadata is handled correctly.
+    /// </summary>
     [Fact]
     public void Parse_ShouldHandleMissingMetadata()
     {
@@ -83,6 +95,9 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Single(index.WeightMap);
     }
 
+    /// <summary>
+    /// Tests that partial metadata is handled correctly.
+    /// </summary>
     [Fact]
     public void Parse_ShouldHandlePartialMetadata()
     {
@@ -103,6 +118,9 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Equal(0L, index.TotalSize);
     }
 
+    /// <summary>
+    /// Tests that distinct shard files are collected correctly.
+    /// </summary>
     [Fact]
     public void Parse_ShouldCollectDistinctShardFiles()
     {
@@ -128,6 +146,9 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Contains("shard-00003.safetensors", index.ShardFiles);
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the weight map is missing.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenWeightMapIsMissing()
     {
@@ -142,6 +163,9 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Throws<InvalidDataException>(() => SafeTensorIndex.Parse(json));
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the weight map is empty.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenWeightMapIsEmpty()
     {
@@ -155,42 +179,63 @@ public sealed class UnitTestSafeTensorIndex
         Assert.Throws<InvalidDataException>(() => SafeTensorIndex.Parse(json));
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the JSON string is null.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenJsonIsNull()
     {
         Assert.Throws<ArgumentException>(() => SafeTensorIndex.Parse(null));
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the JSON string is empty.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenJsonIsEmpty()
     {
         Assert.Throws<ArgumentException>(() => SafeTensorIndex.Parse(""));
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the JSON string is whitespace.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenJsonIsWhitespace()
     {
         Assert.Throws<ArgumentException>(() => SafeTensorIndex.Parse("   "));
     }
 
+    /// <summary>
+    /// Tests that parsing throws an exception when the JSON is malformed.
+    /// </summary>
     [Fact]
     public void Parse_ShouldThrowWhenJsonIsMalformed()
     {
         Assert.Throws<InvalidDataException>(() => SafeTensorIndex.Parse("not valid json"));
     }
 
+    /// <summary>
+    /// Tests that loading from a file throws an exception when the file path is null.
+    /// </summary>
     [Fact]
     public void FromFile_ShouldThrowWhenFilePathIsNull()
     {
         Assert.Throws<ArgumentException>(() => SafeTensorIndex.FromFile(null));
     }
 
+    /// <summary>
+    /// Tests that loading from a file throws an exception when the file path is empty.
+    /// </summary>
     [Fact]
     public void FromFile_ShouldThrowWhenFilePathIsEmpty()
     {
         Assert.Throws<ArgumentException>(() => SafeTensorIndex.FromFile(""));
     }
 
+    /// <summary>
+    /// Tests that loading from a file throws an exception when the file does not exist.
+    /// </summary>
     [Fact]
     public void FromFile_ShouldThrowWhenFileDoesNotExist()
     {
@@ -198,6 +243,9 @@ public sealed class UnitTestSafeTensorIndex
             SafeTensorIndex.FromFile("/nonexistent/path/index.json"));
     }
 
+    /// <summary>
+    /// Tests that an index file can be parsed from disk.
+    /// </summary>
     [Fact]
     public void FromFile_ShouldParseFileOnDisk()
     {
@@ -234,12 +282,18 @@ public sealed class UnitTestSafeTensorIndex
         }
     }
 
+    /// <summary>
+    /// Tests that the default file name for the index is correct.
+    /// </summary>
     [Fact]
     public void DefaultFileName_ShouldBeCorrect()
     {
         Assert.Equal("model.safetensors.index.json", SafeTensorIndex.DefaultFileName);
     }
 
+    /// <summary>
+    /// Tests that an index with a single shard and many tensors can be parsed.
+    /// </summary>
     [Fact]
     public void Parse_ShouldHandleSingleShardWithManyTensors()
     {

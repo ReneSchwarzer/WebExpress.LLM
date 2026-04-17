@@ -2,14 +2,23 @@ using WebExpress.LLM.Gemma;
 
 namespace WebExpress.LLM.Test.Gemma;
 
+/// <summary>
+/// Provides unit tests for the RotaryEmbedding component, ensuring correct application of rotary positional embeddings.
+/// </summary>
 public sealed class UnitTestRotaryEmbedding
 {
+    /// <summary>
+    /// Tests that the constructor throws an exception when the theta value is negative.
+    /// </summary>
     [Fact]
     public void Constructor_NegativeTheta_ShouldThrow()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new RotaryEmbedding(theta: -1));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the partial rotary factor is invalid.
+    /// </summary>
     [Fact]
     public void Constructor_InvalidPartialFactor_ShouldThrow()
     {
@@ -17,6 +26,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.Throws<ArgumentOutOfRangeException>(() => new RotaryEmbedding(partialRotaryFactor: 1.5f));
     }
 
+    /// <summary>
+    /// Tests that applying the rotary embedding at position 0 does not change the vector.
+    /// </summary>
     [Fact]
     public void Apply_2D_Position0_ShouldNotChangeVector()
     {
@@ -34,6 +46,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.Equal(4.0f, result[0, 3], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that applying the rotary embedding at a non-zero position rotates the values.
+    /// </summary>
     [Fact]
     public void Apply_2D_NonZeroPosition_ShouldRotateValues()
     {
@@ -51,6 +66,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.Equal(1.0f * sin0 + 0.0f * cos0, result[0, 1], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that applying the rotary embedding to a 3D tensor works per head.
+    /// </summary>
     [Fact]
     public void Apply_3D_ShouldWorkPerHead()
     {
@@ -71,6 +89,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.Equal(1.0f, result[1, 0, 1], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that applying a partial rotary embedding only rotates part of the dimension.
+    /// </summary>
     [Fact]
     public void Apply_PartialRotary_ShouldOnlyRotatePartOfDimension()
     {
@@ -89,6 +110,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.NotEqual(1.0f, result[0, 0], 1e-2f);
     }
 
+    /// <summary>
+    /// Tests that applying the rotary embedding at different positions produces different results.
+    /// </summary>
     [Fact]
     public void Apply_DifferentPositions_ShouldProduceDifferentResults()
     {
@@ -102,6 +126,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.NotEqual(result0[0, 0], result1[0, 0], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that applying the rotary embedding to a 1D tensor throws an exception.
+    /// </summary>
     [Fact]
     public void Apply_1DTensor_ShouldThrow()
     {
@@ -111,6 +138,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.Throws<ArgumentException>(() => rope.Apply(input));
     }
 
+    /// <summary>
+    /// Tests that the sliding attention configuration uses the default theta value.
+    /// </summary>
     [Fact]
     public void Apply_SlidingAttentionConfig_ShouldUseDefaultTheta()
     {
@@ -124,6 +154,9 @@ public sealed class UnitTestRotaryEmbedding
         Assert.NotEqual(1.0f, result[0, 0], 1e-2f);
     }
 
+    /// <summary>
+    /// Tests that the full attention configuration uses a large theta value.
+    /// </summary>
     [Fact]
     public void Apply_FullAttentionConfig_ShouldUseLargeTheta()
     {

@@ -2,8 +2,14 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Tokenization;
 
+/// <summary>
+/// Provides unit tests for the ByteTokenizer, ensuring correct byte-level encoding and decoding.
+/// </summary>
 public sealed class UnitTestByteTokenizer
 {
+    /// <summary>
+    /// Tests that the encoding and decoding process is deterministic and reversible.
+    /// </summary>
     [Fact]
     public void EncodeDecode_ShouldBeDeterministicAndReversible()
     {

@@ -2,8 +2,14 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
+/// <summary>
+/// Provides unit tests for the TopKSampling strategy, ensuring correct filtering and selection of tokens.
+/// </summary>
 public sealed class UnitTestTopKSampling
 {
+    /// <summary>
+    /// Tests that top-k sampling with a seed is deterministic.
+    /// </summary>
     [Fact]
     public void Sample_WithSeed_ShouldBeDeterministic()
     {
@@ -17,6 +23,9 @@ public sealed class UnitTestTopKSampling
         Assert.Equal(first, second);
     }
 
+    /// <summary>
+    /// Tests that top-k sampling only selects from the top-k tokens.
+    /// </summary>
     [Fact]
     public void Sample_ShouldSelectFromTopKTokens()
     {
@@ -34,6 +43,9 @@ public sealed class UnitTestTopKSampling
         Assert.True(results.All(r => topKIndices.Contains(r)));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the k value is invalid.
+    /// </summary>
     [Fact]
     public void Constructor_WithInvalidK_ShouldThrowArgumentOutOfRangeException()
     {

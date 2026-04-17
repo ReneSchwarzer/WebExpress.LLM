@@ -2,8 +2,14 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
+/// <summary>
+/// Provides unit tests for the GreedySampling strategy, ensuring the highest logit is always selected.
+/// </summary>
 public sealed class UnitTestGreedySampling
 {
+    /// <summary>
+    /// Tests that the sampler selects the token with the highest logit.
+    /// </summary>
     [Fact]
     public void Sample_ShouldSelectTokenWithHighestLogit()
     {
@@ -15,6 +21,9 @@ public sealed class UnitTestGreedySampling
         Assert.Equal(3, result);
     }
 
+    /// <summary>
+    /// Tests that the sampling process is deterministic.
+    /// </summary>
     [Fact]
     public void Sample_ShouldBeDeterministic()
     {
@@ -27,6 +36,9 @@ public sealed class UnitTestGreedySampling
         Assert.Equal(first, second);
     }
 
+    /// <summary>
+    /// Tests that sampling with empty logits throws an argument exception.
+    /// </summary>
     [Fact]
     public void Sample_WithEmptyLogits_ShouldThrowArgumentException()
     {

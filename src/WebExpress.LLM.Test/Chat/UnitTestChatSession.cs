@@ -4,8 +4,14 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Chat;
 
+/// <summary>
+/// Provides unit tests for the ChatSession class, ensuring correct conversation tracking and message processing.
+/// </summary>
 public sealed class UnitTestChatSession
 {
+    /// <summary>
+    /// Tests that sending a message tracks the conversation history and returns the assistant message.
+    /// </summary>
     [Fact]
     public void Send_ShouldTrackConversationAndReturnAssistantMessage()
     {

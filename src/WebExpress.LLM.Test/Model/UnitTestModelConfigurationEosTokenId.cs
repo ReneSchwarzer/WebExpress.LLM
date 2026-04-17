@@ -4,8 +4,14 @@ using WebExpress.LLM.Model;
 
 namespace WebExpress.LLM.Test.Model;
 
+/// <summary>
+/// Provides unit tests for the deserialization of the EOS token ID in model configurations.
+/// </summary>
 public sealed class UnitTestModelConfigurationEosTokenId
 {
+    /// <summary>
+    /// Tests that the EOS token ID can be deserialized from a single integer.
+    /// </summary>
     [Fact]
     public void EosTokenId_ShouldDeserializeSingleInteger()
     {
@@ -17,6 +23,9 @@ public sealed class UnitTestModelConfigurationEosTokenId
         Assert.Equal(1, config.EosTokenId);
     }
 
+    /// <summary>
+    /// Tests that the EOS token ID can be deserialized from an array, returning the first element.
+    /// </summary>
     [Fact]
     public void EosTokenId_ShouldDeserializeArrayAndReturnFirstElement()
     {
@@ -28,6 +37,9 @@ public sealed class UnitTestModelConfigurationEosTokenId
         Assert.Equal(1, config.EosTokenId);
     }
 
+    /// <summary>
+    /// Tests that the EOS token ID can be deserialized from an array with a single element.
+    /// </summary>
     [Fact]
     public void EosTokenId_ShouldDeserializeArrayWithSingleElement()
     {
@@ -39,6 +51,9 @@ public sealed class UnitTestModelConfigurationEosTokenId
         Assert.Equal(42, config.EosTokenId);
     }
 
+    /// <summary>
+    /// Tests that the text configuration EOS token ID can be deserialized from a single integer.
+    /// </summary>
     [Fact]
     public void TextConfig_EosTokenId_ShouldDeserializeSingleInteger()
     {
@@ -50,6 +65,9 @@ public sealed class UnitTestModelConfigurationEosTokenId
         Assert.Equal(2, config.EosTokenId);
     }
 
+    /// <summary>
+    /// Tests that the text configuration EOS token ID can be deserialized from an array, returning the first element.
+    /// </summary>
     [Fact]
     public void TextConfig_EosTokenId_ShouldDeserializeArrayAndReturnFirstElement()
     {
@@ -61,6 +79,9 @@ public sealed class UnitTestModelConfigurationEosTokenId
         Assert.Equal(1, config.EosTokenId);
     }
 
+    /// <summary>
+    /// Tests that loading the model succeeds when the EOS token ID is an array.
+    /// </summary>
     [Fact]
     public void Load_ShouldSucceedWhenEosTokenIdIsArray()
     {

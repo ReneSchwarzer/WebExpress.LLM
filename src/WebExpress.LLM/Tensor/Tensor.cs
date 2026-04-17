@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Tensor;
 
@@ -247,13 +248,14 @@ public sealed class Tensor
         var cols = _shape[1];
         var result = new float[rows * cols];
 
-        for (var i = 0; i < rows; i++)
+        Parallel.For(0, rows, i =>
+        //for (var i = 0; i < rows; i++)
         {
             for (var j = 0; j < cols; j++)
             {
                 result[j * rows + i] = _data[i * cols + j];
             }
-        }
+        });
 
         return new Tensor([cols, rows], result, noCopy: true);
     }

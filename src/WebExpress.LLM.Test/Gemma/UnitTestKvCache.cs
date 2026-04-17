@@ -3,8 +3,14 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
+/// <summary>
+/// Provides unit tests for the KvCache class, ensuring correct storage and retrieval of key-value pairs.
+/// </summary>
 public sealed class UnitTestKvCache
 {
+    /// <summary>
+    /// Tests that the constructor creates an empty cache.
+    /// </summary>
     [Fact]
     public void Constructor_ShouldCreateEmptyCache()
     {
@@ -14,6 +20,9 @@ public sealed class UnitTestKvCache
         Assert.False(cache.HasLayer(0));
     }
 
+    /// <summary>
+    /// Tests that the update method stores keys and values.
+    /// </summary>
     [Fact]
     public void Update_ShouldStoreKeysAndValues()
     {
@@ -29,6 +38,9 @@ public sealed class UnitTestKvCache
         Assert.Equal(3, cache.GetSequenceLength(0));
     }
 
+    /// <summary>
+    /// Tests that the update method appends to an existing cache.
+    /// </summary>
     [Fact]
     public void Update_ShouldAppendToExistingCache()
     {
@@ -49,6 +61,9 @@ public sealed class UnitTestKvCache
         Assert.Equal(4, cache.GetSequenceLength(0));
     }
 
+    /// <summary>
+    /// Tests that the get method returns cached data.
+    /// </summary>
     [Fact]
     public void Get_ShouldReturnCachedData()
     {
@@ -73,6 +88,9 @@ public sealed class UnitTestKvCache
         Assert.Equal(2.0f, cachedValues[0, 0, 0]);
     }
 
+    /// <summary>
+    /// Tests that the get method throws an exception for a non-existent layer.
+    /// </summary>
     [Fact]
     public void Get_NonexistentLayer_ShouldThrow()
     {
@@ -80,6 +98,9 @@ public sealed class UnitTestKvCache
         Assert.Throws<KeyNotFoundException>(() => cache.Get(0));
     }
 
+    /// <summary>
+    /// Tests that getting the sequence length of an empty layer returns zero.
+    /// </summary>
     [Fact]
     public void GetSequenceLength_EmptyLayer_ShouldReturnZero()
     {
@@ -87,6 +108,9 @@ public sealed class UnitTestKvCache
         Assert.Equal(0, cache.GetSequenceLength(99));
     }
 
+    /// <summary>
+    /// Tests that the clear method removes all data from the cache.
+    /// </summary>
     [Fact]
     public void Clear_ShouldRemoveAllData()
     {
@@ -106,6 +130,9 @@ public sealed class UnitTestKvCache
         Assert.False(cache.HasLayer(1));
     }
 
+    /// <summary>
+    /// Tests that updating multiple layers tracks them independently.
+    /// </summary>
     [Fact]
     public void Update_MultipleLayers_ShouldTrackIndependently()
     {
@@ -120,6 +147,9 @@ public sealed class UnitTestKvCache
         Assert.Equal(5, cache.GetSequenceLength(1));
     }
 
+    /// <summary>
+    /// Tests that the update method clones the data.
+    /// </summary>
     [Fact]
     public void Update_ShouldCloneData()
     {

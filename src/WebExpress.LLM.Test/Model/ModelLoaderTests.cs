@@ -7,8 +7,14 @@ using WebExpress.LLM.SafeTensors;
 
 namespace WebExpress.LLM.Test.Model;
 
+/// <summary>
+/// Provides unit tests for the ModelLoader class, covering various loading scenarios and error handling.
+/// </summary>
 public sealed class ModelLoaderTests
 {
+    /// <summary>
+    /// Tests that the load method reads the configuration and weights.
+    /// </summary>
     [Fact]
     public void Load_ShouldReadConfigurationAndWeights()
     {
@@ -53,6 +59,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method reads safetensors weights.
+    /// </summary>
     [Fact]
     public void Load_ShouldReadSafetensorsWeights()
     {
@@ -93,6 +102,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method prefers safetensors over other formats.
+    /// </summary>
     [Fact]
     public void Load_ShouldPreferSafetensorsOverOtherFormats()
     {
@@ -137,6 +149,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method reads Gemma-4 nested configuration.
+    /// </summary>
     [Fact]
     public void Load_ShouldReadGemma4NestedConfiguration()
     {
@@ -277,6 +292,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method throws an exception when no weights file exists.
+    /// </summary>
     [Fact]
     public void Load_ShouldThrowWhenNoWeightsFileExists()
     {
@@ -314,6 +332,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method throws an exception when the vocabulary size is zero.
+    /// </summary>
     [Fact]
     public void Load_ShouldThrowWhenVocabularySizeIsZero()
     {
@@ -352,6 +373,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method throws an exception when the context length is zero.
+    /// </summary>
     [Fact]
     public void Load_ShouldThrowWhenContextLengthIsZero()
     {
@@ -390,6 +414,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method detects sharded weights from an index file.
+    /// </summary>
     [Fact]
     public void Load_ShouldDetectShardedWeightsFromIndexFile()
     {
@@ -447,6 +474,9 @@ public sealed class ModelLoaderTests
         }
     }
 
+    /// <summary>
+    /// Tests that the load method loads tensors correctly from sharded weights.
+    /// </summary>
     [Fact]
     public void Load_ShardedWeights_ShouldLoadTensorsCorrectly()
     {

@@ -2,8 +2,14 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Tensor;
 
+/// <summary>
+/// Provides unit tests for the Tensor class, covering basic operations, shape manipulation, and data access.
+/// </summary>
 public sealed class UnitTestTensor
 {
+    /// <summary>
+    /// Tests that the constructor with a shape creates a zero-filled tensor.
+    /// </summary>
     [Fact]
     public void Constructor_WithShape_ShouldCreateZeroFilledTensor()
     {
@@ -16,6 +22,9 @@ public sealed class UnitTestTensor
         Assert.All(tensor.ToArray(), v => Assert.Equal(0.0f, v));
     }
 
+    /// <summary>
+    /// Tests that the constructor with a shape and data stores the data correctly.
+    /// </summary>
     [Fact]
     public void Constructor_WithShapeAndData_ShouldStoreData()
     {
@@ -30,6 +39,9 @@ public sealed class UnitTestTensor
         Assert.Equal(6.0f, tensor[1, 2]);
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the data length does not match the shape.
+    /// </summary>
     [Fact]
     public void Constructor_WithMismatchedDataLength_ShouldThrow()
     {
@@ -37,18 +49,27 @@ public sealed class UnitTestTensor
         Assert.Throws<ArgumentException>(() => new WebExpress.LLM.Tensor.Tensor([2, 3], data));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the shape is empty.
+    /// </summary>
     [Fact]
     public void Constructor_WithEmptyShape_ShouldThrow()
     {
         Assert.Throws<ArgumentException>(() => new WebExpress.LLM.Tensor.Tensor(Array.Empty<int>()));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when a dimension is negative.
+    /// </summary>
     [Fact]
     public void Constructor_WithNegativeDimension_ShouldThrow()
     {
         Assert.Throws<ArgumentException>(() => new WebExpress.LLM.Tensor.Tensor(3, -1));
     }
 
+    /// <summary>
+    /// Tests that the Zeros method creates a zero-filled tensor.
+    /// </summary>
     [Fact]
     public void Zeros_ShouldCreateZeroTensor()
     {
@@ -57,6 +78,9 @@ public sealed class UnitTestTensor
         Assert.All(tensor.ToArray(), v => Assert.Equal(0.0f, v));
     }
 
+    /// <summary>
+    /// Tests that the Ones method creates a tensor filled with ones.
+    /// </summary>
     [Fact]
     public void Ones_ShouldCreateOnesTensor()
     {
@@ -65,6 +89,9 @@ public sealed class UnitTestTensor
         Assert.All(tensor.ToArray(), v => Assert.Equal(1.0f, v));
     }
 
+    /// <summary>
+    /// Tests that the FromArray method creates a 1D tensor correctly.
+    /// </summary>
     [Fact]
     public void FromArray_ShouldCreate1DTensor()
     {
@@ -75,6 +102,9 @@ public sealed class UnitTestTensor
         Assert.Equal(3.0f, tensor[2]);
     }
 
+    /// <summary>
+    /// Tests that the From2DArray method creates a 2D tensor correctly.
+    /// </summary>
     [Fact]
     public void From2DArray_ShouldCreate2DTensor()
     {
@@ -85,6 +115,9 @@ public sealed class UnitTestTensor
         Assert.Equal(3.0f, tensor[1, 0]);
     }
 
+    /// <summary>
+    /// Tests that adding two tensors of the same shape works element-wise.
+    /// </summary>
     [Fact]
     public void Addition_SameShape_ShouldAddElementWise()
     {
@@ -99,6 +132,9 @@ public sealed class UnitTestTensor
         Assert.Equal(12.0f, result[1, 1]);
     }
 
+    /// <summary>
+    /// Tests that addition with broadcasting works correctly.
+    /// </summary>
     [Fact]
     public void Addition_WithBroadcasting_ShouldWork()
     {
@@ -117,6 +153,9 @@ public sealed class UnitTestTensor
         Assert.Equal(36.0f, result[1, 2]);
     }
 
+    /// <summary>
+    /// Tests that subtraction works element-wise.
+    /// </summary>
     [Fact]
     public void Subtraction_ShouldSubtractElementWise()
     {
@@ -130,6 +169,9 @@ public sealed class UnitTestTensor
         Assert.Equal(27.0f, result[2]);
     }
 
+    /// <summary>
+    /// Tests that multiplication works element-wise.
+    /// </summary>
     [Fact]
     public void Multiplication_ShouldMultiplyElementWise()
     {
@@ -142,6 +184,9 @@ public sealed class UnitTestTensor
         Assert.Equal(24.0f, result[1]);
     }
 
+    /// <summary>
+    /// Tests that scalar multiplication scales all elements of the tensor.
+    /// </summary>
     [Fact]
     public void ScalarMultiplication_ShouldScaleAll()
     {
@@ -153,6 +198,9 @@ public sealed class UnitTestTensor
         Assert.Equal(6.0f, result[2]);
     }
 
+    /// <summary>
+    /// Tests that scalar multiplication is commutative.
+    /// </summary>
     [Fact]
     public void ScalarMultiplication_Commutative_ShouldWork()
     {
@@ -164,6 +212,9 @@ public sealed class UnitTestTensor
         Assert.Equal(6.0f, result[2]);
     }
 
+    /// <summary>
+    /// Tests that scalar division divides all elements of the tensor.
+    /// </summary>
     [Fact]
     public void ScalarDivision_ShouldDivideAll()
     {
@@ -174,6 +225,9 @@ public sealed class UnitTestTensor
         Assert.Equal(4.0f, result[1]);
     }
 
+    /// <summary>
+    /// Tests that scalar addition adds a value to all elements of the tensor.
+    /// </summary>
     [Fact]
     public void ScalarAddition_ShouldAddToAll()
     {
@@ -184,6 +238,9 @@ public sealed class UnitTestTensor
         Assert.Equal(12.0f, result[1]);
     }
 
+    /// <summary>
+    /// Tests that negation negates all elements of the tensor.
+    /// </summary>
     [Fact]
     public void Negation_ShouldNegateAll()
     {
@@ -195,6 +252,9 @@ public sealed class UnitTestTensor
         Assert.Equal(-3.0f, result[2]);
     }
 
+    /// <summary>
+    /// Tests that transposing a 2D tensor swaps its rows and columns.
+    /// </summary>
     [Fact]
     public void Transpose_2DTensor_ShouldSwapRowsAndColumns()
     {
@@ -211,6 +271,9 @@ public sealed class UnitTestTensor
         Assert.Equal(6.0f, result[2, 1]);
     }
 
+    /// <summary>
+    /// Tests that transposing a non-2D tensor throws an exception.
+    /// </summary>
     [Fact]
     public void Transpose_Non2DTensor_ShouldThrow()
     {
@@ -218,6 +281,9 @@ public sealed class UnitTestTensor
         Assert.Throws<InvalidOperationException>(() => a.Transpose());
     }
 
+    /// <summary>
+    /// Tests that the GetRow method extracts the specified row correctly.
+    /// </summary>
     [Fact]
     public void GetRow_ShouldExtractRow()
     {
@@ -230,6 +296,9 @@ public sealed class UnitTestTensor
         Assert.Equal(4.0f, row[1]);
     }
 
+    /// <summary>
+    /// Tests that the GetLastRow method extracts the last row correctly.
+    /// </summary>
     [Fact]
     public void GetLastRow_ShouldExtractLastRow()
     {
@@ -240,6 +309,9 @@ public sealed class UnitTestTensor
         Assert.Equal(6.0f, last[1]);
     }
 
+    /// <summary>
+    /// Tests that the Reshape method changes the shape of the tensor correctly.
+    /// </summary>
     [Fact]
     public void Reshape_ShouldChangeShape()
     {
@@ -253,6 +325,9 @@ public sealed class UnitTestTensor
         Assert.Equal(3.0f, reshaped[1, 0]);
     }
 
+    /// <summary>
+    /// Tests that reshaping with a mismatched length throws an exception.
+    /// </summary>
     [Fact]
     public void Reshape_WithMismatchedLength_ShouldThrow()
     {
@@ -260,6 +335,9 @@ public sealed class UnitTestTensor
         Assert.Throws<ArgumentException>(() => a.Reshape(2, 2));
     }
 
+    /// <summary>
+    /// Tests that the Clone method creates an independent copy of the tensor.
+    /// </summary>
     [Fact]
     public void Clone_ShouldCreateIndependentCopy()
     {
@@ -272,6 +350,9 @@ public sealed class UnitTestTensor
         Assert.Equal(99.0f, clone[0]);
     }
 
+    /// <summary>
+    /// Tests that 3D indexing works correctly for both reading and writing.
+    /// </summary>
     [Fact]
     public void ThreeDimensionalAccess_ShouldWork()
     {
@@ -281,6 +362,9 @@ public sealed class UnitTestTensor
         Assert.Equal(42.0f, tensor[1, 2, 3]);
     }
 
+    /// <summary>
+    /// Tests that division works element-wise between two tensors.
+    /// </summary>
     [Fact]
     public void Division_ElementWise_ShouldWork()
     {
@@ -292,6 +376,9 @@ public sealed class UnitTestTensor
         Assert.Equal(4.0f, result[1]);
     }
 
+    /// <summary>
+    /// Tests that calling GetRow on a 1D tensor throws an exception.
+    /// </summary>
     [Fact]
     public void GetRow_On1DTensor_ShouldThrow()
     {
@@ -299,6 +386,9 @@ public sealed class UnitTestTensor
         Assert.Throws<InvalidOperationException>(() => a.GetRow(0));
     }
 
+    /// <summary>
+    /// Tests that calling GetRow with a negative index throws an exception.
+    /// </summary>
     [Fact]
     public void GetRow_NegativeIndex_ShouldThrow()
     {
@@ -306,6 +396,9 @@ public sealed class UnitTestTensor
         Assert.Throws<ArgumentOutOfRangeException>(() => a.GetRow(-1));
     }
 
+    /// <summary>
+    /// Tests that calling GetRow with an index equal to the first dimension throws an exception.
+    /// </summary>
     [Fact]
     public void GetRow_IndexEqualToFirstDimension_ShouldThrow()
     {
@@ -313,6 +406,9 @@ public sealed class UnitTestTensor
         Assert.Throws<ArgumentOutOfRangeException>(() => a.GetRow(3));
     }
 
+    /// <summary>
+    /// Tests that calling GetRow with an index beyond the first dimension throws an exception.
+    /// </summary>
     [Fact]
     public void GetRow_IndexBeyondFirstDimension_ShouldThrow()
     {

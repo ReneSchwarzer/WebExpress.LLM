@@ -2,8 +2,14 @@ using WebExpress.LLM.Inference;
 
 namespace WebExpress.LLM.Test.Inference;
 
+/// <summary>
+/// Provides unit tests for the DeterministicInferenceEngine, ensuring that token generation is reproducible.
+/// </summary>
 public sealed class UnitTestDeterministicInferenceEngine
 {
+    /// <summary>
+    /// Tests that generating tokens returns a deterministic sequence.
+    /// </summary>
     [Fact]
     public void GenerateTokens_ShouldReturnDeterministicSequence()
     {

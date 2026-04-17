@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Tensor;
 
@@ -60,9 +62,12 @@ public static class TensorOperations
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void MatMulCore(float[] aData, float[] bData, float[] result, int m, int k, int n)
     {
-        for (var iTile = 0; iTile < m; iTile += TileSize)
+        var vecWidth = Vector<float>.Count;
+
+        Parallel.For(0, m, i =>
         {
-            var iEnd = Math.Min(iTile + TileSize, m);
+            var aRowOffset = i * k;
+            var rRowOffset = i * n;
 
             for (var kTile = 0; kTile < k; kTile += TileSize)
             {
@@ -72,25 +77,34 @@ public static class TensorOperations
                 {
                     var jEnd = Math.Min(jTile + TileSize, n);
 
-                    for (var i = iTile; i < iEnd; i++)
+                    for (var p = kTile; p < kEnd; p++)
                     {
-                        var aRowOffset = i * k;
-                        var rRowOffset = i * n;
+                        var aVal = aData[aRowOffset + p];
+                        if (aVal == 0f)
+                            continue;
 
-                        for (var p = kTile; p < kEnd; p++)
+                        var aVec = new Vector<float>(aVal);
+                        var bRowOffset = p * n;
+
+                        var j = jTile;
+                        for (; j <= jEnd - vecWidth; j += vecWidth)
                         {
-                            var aVal = aData[aRowOffset + p];
-                            var bRowOffset = p * n;
+                            var bVec = new Vector<float>(bData, bRowOffset + j);
+                            var rVec = new Vector<float>(result, rRowOffset + j);
 
-                            for (var j = jTile; j < jEnd; j++)
-                            {
-                                result[rRowOffset + j] += aVal * bData[bRowOffset + j];
-                            }
+                            rVec += aVec * bVec;
+
+                            rVec.CopyTo(result, rRowOffset + j);
+                        }
+
+                        for (; j < jEnd; j++)
+                        {
+                            result[rRowOffset + j] += aVal * bData[bRowOffset + j];
                         }
                     }
                 }
             }
-        }
+        });
     }
 
     /// <summary>
@@ -127,11 +141,12 @@ public static class TensorOperations
         var result = new float[batch * m * n];
         var aData = a.Data;
         var bData = b.Data;
+
         var aSliceSize = m * k;
         var bSliceSize = k * n;
         var rSliceSize = m * n;
 
-        for (var bIdx = 0; bIdx < batch; bIdx++)
+        Parallel.For(0, batch, bIdx =>
         {
             var aOffset = bIdx * aSliceSize;
             var bOffset = bIdx * bSliceSize;
@@ -168,7 +183,7 @@ public static class TensorOperations
                     }
                 }
             }
-        }
+        });
 
         return new Tensor([batch, m, n], result);
     }

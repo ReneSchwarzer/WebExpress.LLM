@@ -3,8 +3,14 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
+/// <summary>
+/// Provides unit tests for the MultiHeadAttention component of the Gemma model.
+/// </summary>
 public sealed class UnitTestMultiHeadAttention
 {
+    /// <summary>
+    /// Tests that the forward pass produces the correct output shape.
+    /// </summary>
     [Fact]
     public void Forward_ShouldProduceCorrectOutputShape()
     {
@@ -40,6 +46,9 @@ public sealed class UnitTestMultiHeadAttention
         Assert.Equal(hiddenSize, result.Shape[1]);
     }
 
+    /// <summary>
+    /// Tests that the forward pass with KV cache accumulates the sequence length.
+    /// </summary>
     [Fact]
     public void Forward_WithKvCache_ShouldAccumulateSequenceLength()
     {
@@ -73,6 +82,9 @@ public sealed class UnitTestMultiHeadAttention
         Assert.Equal(4, kvCache.GetSequenceLength(0));
     }
 
+    /// <summary>
+    /// Tests that the forward pass with a sliding window produces output.
+    /// </summary>
     [Fact]
     public void Forward_SlidingWindow_ShouldProduceOutput()
     {
@@ -99,6 +111,9 @@ public sealed class UnitTestMultiHeadAttention
         Assert.Equal(hiddenSize, result.Shape[1]);
     }
 
+    /// <summary>
+    /// Tests that the forward pass is deterministic.
+    /// </summary>
     [Fact]
     public void Forward_ShouldBeDeterministic()
     {
@@ -127,6 +142,9 @@ public sealed class UnitTestMultiHeadAttention
         }
     }
 
+    /// <summary>
+    /// Tests that the forward pass derives the head dimension from the weights if it is larger than the configuration.
+    /// </summary>
     [Fact]
     public void Forward_WeightHeadDimLargerThanConfig_ShouldDeriveFromWeights()
     {
@@ -159,6 +177,9 @@ public sealed class UnitTestMultiHeadAttention
         Assert.Equal(hiddenSize, result.Shape[1]);
     }
 
+    /// <summary>
+    /// Tests that the forward pass produces the correct output shape with asymmetric Q and KV head dimensions.
+    /// </summary>
     [Fact]
     public void Forward_AsymmetricQKvHeadDim_ShouldProduceCorrectOutputShape()
     {
@@ -193,6 +214,9 @@ public sealed class UnitTestMultiHeadAttention
         Assert.Equal(hiddenSize, result.Shape[1]);
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the rotary embedding is null.
+    /// </summary>
     [Fact]
     public void Forward_NullRope_ShouldThrow()
     {

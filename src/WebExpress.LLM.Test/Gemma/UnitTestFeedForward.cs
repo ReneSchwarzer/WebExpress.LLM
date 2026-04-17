@@ -1,10 +1,15 @@
 using WebExpress.LLM.Gemma;
-using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Gemma;
 
+/// <summary>
+/// Provides unit tests for the FeedForward component of the Gemma model.
+/// </summary>
 public sealed class UnitTestFeedForward
 {
+    /// <summary>
+    /// Tests that the forward pass produces the correct output shape.
+    /// </summary>
     [Fact]
     public void Forward_ShouldProduceCorrectOutputShape()
     {
@@ -23,6 +28,9 @@ public sealed class UnitTestFeedForward
         Assert.Equal(hiddenSize, result.Shape[1]);
     }
 
+    /// <summary>
+    /// Tests that the forward pass with zero input returns zero output.
+    /// </summary>
     [Fact]
     public void Forward_ZeroInput_ShouldReturnZero()
     {
@@ -43,6 +51,9 @@ public sealed class UnitTestFeedForward
         }
     }
 
+    /// <summary>
+    /// Tests that the forward pass is deterministic.
+    /// </summary>
     [Fact]
     public void Forward_ShouldBeDeterministic()
     {
@@ -63,6 +74,9 @@ public sealed class UnitTestFeedForward
         }
     }
 
+    /// <summary>
+    /// Tests that the forward pass throws an exception when the input is null.
+    /// </summary>
     [Fact]
     public void Forward_NullInput_ShouldThrow()
     {
@@ -74,6 +88,9 @@ public sealed class UnitTestFeedForward
             FeedForward.Forward(null, gateWeight, upWeight, downWeight));
     }
 
+    /// <summary>
+    /// Tests that the forward pass throws an exception when the gate weight is null.
+    /// </summary>
     [Fact]
     public void Forward_NullGateWeight_ShouldThrow()
     {
@@ -85,6 +102,9 @@ public sealed class UnitTestFeedForward
             FeedForward.Forward(input, null, upWeight, downWeight));
     }
 
+    /// <summary>
+    /// Tests that the forward pass with non-zero input produces non-zero output.
+    /// </summary>
     [Fact]
     public void Forward_NonZeroInput_ShouldProduceNonZeroOutput()
     {
@@ -121,6 +141,24 @@ public sealed class UnitTestFeedForward
         Assert.True(hasNonZero, "FFN with non-zero input should produce non-zero output.");
     }
 
+    /// <summary>
+    /// Creates a new tensor weight matrix with the specified number of rows and columns
+    /// and initializes its values deterministically.
+    /// </summary>
+    /// <remarks>
+    /// The values of the weight matrix are initialized deterministically based on their
+    /// indices and are not random. This method is suitable for tests or deterministic
+    /// initialization scenarios, but should not be used for production training.
+    /// </remarks>
+    /// <param name="rows">
+    /// The number of rows of the weight matrix to create. Must be greater than 0.
+    /// </param>
+    /// <param name="cols">
+    /// The number of columns of the weight matrix to create. Must be greater than 0.
+    /// </param>
+    /// <returns>
+    /// A tensor object with the specified dimensions containing the initialized weight values.
+    /// </returns>
     private static WebExpress.LLM.Tensor.Tensor CreateWeight(int rows, int cols)
     {
         var data = new float[rows * cols];
@@ -133,6 +171,25 @@ public sealed class UnitTestFeedForward
         return new WebExpress.LLM.Tensor.Tensor([rows, cols], data);
     }
 
+    /// <summary>
+    /// Creates a new tensor instance with the specified dimensions and initializes all
+    /// elements with non‑zero values.
+    /// </summary>
+    /// <remarks>
+    /// This method guarantees that no element of the returned tensor has the value 0.
+    /// It is useful for avoiding numerical issues during the initialization of weight
+    /// matrices.
+    /// </remarks>
+    /// <param name="rows">
+    /// The number of rows of the tensor to create. Must be greater than 0.
+    /// </param>
+    /// <param name="cols">
+    /// The number of columns of the tensor to create. Must be greater than 0.
+    /// </param>
+    /// <returns>
+    /// A tensor instance of size <paramref name="rows"/> × <paramref name="cols"/>,
+    /// where every element contains a non‑zero value.
+    /// </returns>
     private static WebExpress.LLM.Tensor.Tensor CreateNonZeroWeight(int rows, int cols)
     {
         var data = new float[rows * cols];
@@ -145,6 +202,23 @@ public sealed class UnitTestFeedForward
         return new WebExpress.LLM.Tensor.Tensor([rows, cols], data);
     }
 
+    /// <summary>
+    /// Creates a new tensor with the specified sequence and hidden dimensions,
+    /// initializing all values deterministically.
+    /// </summary>
+    /// <remarks>
+    /// This method can be used for tests or as placeholder data, since the
+    /// initialization is fully reproducible.
+    /// </remarks>
+    /// <param name="seqLen">
+    /// The number of sequence steps (first dimension of the tensor). Must be greater than 0.
+    /// </param>
+    /// <param name="hiddenSize">
+    /// The size of the hidden dimension (second dimension of the tensor). Must be greater than 0.
+    /// </param>
+    /// <returns>
+    /// A tensor of shape [seqLen, hiddenSize] whose values are deterministically initialized.
+    /// </returns>
     private static WebExpress.LLM.Tensor.Tensor CreateInput(int seqLen, int hiddenSize)
     {
         var data = new float[seqLen * hiddenSize];

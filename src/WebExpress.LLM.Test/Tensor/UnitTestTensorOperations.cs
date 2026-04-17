@@ -2,8 +2,14 @@ using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Test.Tensor;
 
+/// <summary>
+/// Provides unit tests for the TensorOperations class, validating mathematical operations and neural network activations.
+/// </summary>
 public sealed class UnitTestTensorOperations
 {
+    /// <summary>
+    /// Tests that matrix multiplication computes the correct product.
+    /// </summary>
     [Fact]
     public void MatMul_ShouldComputeCorrectProduct()
     {
@@ -23,6 +29,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(154.0f, result[1, 1]);
     }
 
+    /// <summary>
+    /// Tests that matrix multiplication throws an exception when the inner dimensions do not match.
+    /// </summary>
     [Fact]
     public void MatMul_InnerDimensionMismatch_ShouldThrow()
     {
@@ -32,6 +41,9 @@ public sealed class UnitTestTensorOperations
         Assert.Throws<ArgumentException>(() => TensorOperations.MatMul(a, b));
     }
 
+    /// <summary>
+    /// Tests that matrix multiplication throws an exception when one of the tensors is not 2D.
+    /// </summary>
     [Fact]
     public void MatMul_Non2DTensor_ShouldThrow()
     {
@@ -41,6 +53,9 @@ public sealed class UnitTestTensorOperations
         Assert.Throws<ArgumentException>(() => TensorOperations.MatMul(a, b));
     }
 
+    /// <summary>
+    /// Tests that matrix multiplication with an identity matrix returns the same tensor.
+    /// </summary>
     [Fact]
     public void MatMul_IdentityMatrix_ShouldReturnSame()
     {
@@ -58,6 +73,9 @@ public sealed class UnitTestTensorOperations
         }
     }
 
+    /// <summary>
+    /// Tests that batch matrix multiplication computes the product for each batch.
+    /// </summary>
     [Fact]
     public void BatchMatMul_ShouldComputePerBatch()
     {
@@ -84,6 +102,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(20.0f, result[1, 1, 1]);
     }
 
+    /// <summary>
+    /// Tests that softmax normalizes the input to a probability distribution.
+    /// </summary>
     [Fact]
     public void Softmax_ShouldNormalizeToDistribution()
     {
@@ -101,6 +122,9 @@ public sealed class UnitTestTensorOperations
         Assert.True(result[1] < result[2]);
     }
 
+    /// <summary>
+    /// Tests that softmax on a 2D tensor normalizes each row independently.
+    /// </summary>
     [Fact]
     public void Softmax_2D_ShouldNormalizePerRow()
     {
@@ -115,6 +139,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(1.0f, row1Sum, 1e-5f);
     }
 
+    /// <summary>
+    /// Tests that softmax on a uniform input returns a uniform distribution.
+    /// </summary>
     [Fact]
     public void Softmax_UniformInput_ShouldReturnUniform()
     {
@@ -126,6 +153,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(1.0f / 3, result[2], 1e-5f);
     }
 
+    /// <summary>
+    /// Tests that the GELU activation function is applied correctly.
+    /// </summary>
     [Fact]
     public void Gelu_ShouldApplyActivation()
     {
@@ -142,6 +172,9 @@ public sealed class UnitTestTensorOperations
         Assert.InRange(result[3], 1.94f, 1.97f);
     }
 
+    /// <summary>
+    /// Tests that RMS normalization normalizes the input correctly.
+    /// </summary>
     [Fact]
     public void RmsNorm_ShouldNormalizeCorrectly()
     {
@@ -159,6 +192,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(8.0f / rms, result[0, 3], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that RMS normalization with weights scales the result correctly.
+    /// </summary>
     [Fact]
     public void RmsNorm_WithWeight_ShouldScaleResult()
     {
@@ -172,6 +208,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(4.0f / rms * 0.5f, result[0, 1], 1e-4f);
     }
 
+    /// <summary>
+    /// Tests that RMS normalization throws an exception when the weight dimensions do not match.
+    /// </summary>
     [Fact]
     public void RmsNorm_WeightDimensionMismatch_ShouldThrow()
     {
@@ -181,6 +220,9 @@ public sealed class UnitTestTensorOperations
         Assert.Throws<ArgumentException>(() => TensorOperations.RmsNorm(input, weight));
     }
 
+    /// <summary>
+    /// Tests that the tanh function is applied element-wise.
+    /// </summary>
     [Fact]
     public void Tanh_ShouldApplyElementWise()
     {
@@ -192,6 +234,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(MathF.Tanh(-1.0f), result[2], 1e-6f);
     }
 
+    /// <summary>
+    /// Tests that the square root is computed element-wise.
+    /// </summary>
     [Fact]
     public void Sqrt_ShouldComputeElementWise()
     {
@@ -203,6 +248,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(4.0f, result[2], 1e-6f);
     }
 
+    /// <summary>
+    /// Tests that the SiLU activation function is applied correctly.
+    /// </summary>
     [Fact]
     public void Silu_ShouldApplyActivation()
     {
@@ -217,6 +265,9 @@ public sealed class UnitTestTensorOperations
         Assert.InRange(result[2], -0.28f, -0.26f);
     }
 
+    /// <summary>
+    /// Tests that the causal mask correctly masks future tokens.
+    /// </summary>
     [Fact]
     public void CausalMask_ShouldMaskFuture()
     {
@@ -239,6 +290,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(float.NegativeInfinity, mask[1, 2]);
     }
 
+    /// <summary>
+    /// Tests that the sliding window mask correctly limits the attention range.
+    /// </summary>
     [Fact]
     public void SlidingWindowMask_ShouldLimitAttentionRange()
     {
@@ -264,6 +318,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(0.0f, mask[4, 4]);
     }
 
+    /// <summary>
+    /// Tests that concatenation along dimension 0 joins the tensors correctly.
+    /// </summary>
     [Fact]
     public void Concatenate_ShouldJoinAlongDim0()
     {
@@ -279,6 +336,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(9.0f, result[2, 2]);
     }
 
+    /// <summary>
+    /// Tests that concatenation along dimension 1 joins the tensors correctly.
+    /// </summary>
     [Fact]
     public void Concatenate_ShouldJoinAlongDim1()
     {
@@ -297,6 +357,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(6.0f, result[1, 2]);
     }
 
+    /// <summary>
+    /// Tests that concatenation throws an exception when dimensions do not match.
+    /// </summary>
     [Fact]
     public void Concatenate_DimensionMismatch_ShouldThrow()
     {
@@ -306,6 +369,9 @@ public sealed class UnitTestTensorOperations
         Assert.Throws<ArgumentException>(() => TensorOperations.Concatenate(a, b, dim: 0));
     }
 
+    /// <summary>
+    /// Tests that the embedding lookup selects the correct rows from the embedding matrix.
+    /// </summary>
     [Fact]
     public void EmbeddingLookup_ShouldSelectRows()
     {
@@ -334,6 +400,9 @@ public sealed class UnitTestTensorOperations
         Assert.Equal(1.0f, result[2, 0]);
     }
 
+    /// <summary>
+    /// Tests that embedding lookup throws an exception when the weight tensor is not 2D.
+    /// </summary>
     [Fact]
     public void EmbeddingLookup_Non2DWeight_ShouldThrow()
     {
@@ -341,6 +410,9 @@ public sealed class UnitTestTensorOperations
         Assert.Throws<ArgumentException>(() => TensorOperations.EmbeddingLookup(weight, [0]));
     }
 
+    /// <summary>
+    /// Tests that embedding lookup throws an exception when a token ID is out of range.
+    /// </summary>
     [Fact]
     public void EmbeddingLookup_TokenIdOutOfRange_ShouldThrow()
     {
@@ -351,6 +423,9 @@ public sealed class UnitTestTensorOperations
         Assert.Contains("4", ex.Message);
     }
 
+    /// <summary>
+    /// Tests that embedding lookup throws an exception when a token ID is negative.
+    /// </summary>
     [Fact]
     public void EmbeddingLookup_NegativeTokenId_ShouldThrow()
     {

@@ -2,6 +2,9 @@ using WebExpress.LLM.Tokenization;
 
 namespace WebExpress.LLM.Test.Tokenization;
 
+/// <summary>
+/// Provides unit tests for the GemmaTokenizer, covering BPE encoding, decoding, and special token handling.
+/// </summary>
 public sealed class UnitTestGemmaTokenizer
 {
     /// <summary>
@@ -70,6 +73,9 @@ public sealed class UnitTestGemmaTokenizer
         return (vocab, merges);
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the vocabulary is empty.
+    /// </summary>
     [Fact]
     public void Constructor_WithEmptyVocabulary_ShouldThrow()
     {
@@ -80,6 +86,9 @@ public sealed class UnitTestGemmaTokenizer
             new GemmaTokenizer(emptyVocab, merges));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the vocabulary is null.
+    /// </summary>
     [Fact]
     public void Constructor_WithNullVocabulary_ShouldThrow()
     {
@@ -87,6 +96,9 @@ public sealed class UnitTestGemmaTokenizer
             new GemmaTokenizer(null, new List<(string, string)>()));
     }
 
+    /// <summary>
+    /// Tests that the constructor throws an exception when the merges list is null.
+    /// </summary>
     [Fact]
     public void Constructor_WithNullMerges_ShouldThrow()
     {
@@ -96,6 +108,9 @@ public sealed class UnitTestGemmaTokenizer
             new GemmaTokenizer(vocab, null));
     }
 
+    /// <summary>
+    /// Tests that the Encode method throws an exception when the input text is null.
+    /// </summary>
     [Fact]
     public void Encode_WithNull_ShouldThrow()
     {
@@ -105,6 +120,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Throws<ArgumentNullException>(() => tokenizer.Encode(null));
     }
 
+    /// <summary>
+    /// Tests that encoding an empty string returns only the BOS token if configured.
+    /// </summary>
     [Fact]
     public void Encode_WithEmptyString_ShouldReturnBosOnly()
     {
@@ -117,6 +135,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal(1, tokens[0]); // BOS token
     }
 
+    /// <summary>
+    /// Tests that encoding an empty string with no special tokens returns an empty list.
+    /// </summary>
     [Fact]
     public void Encode_WithEmptyStringAndNoSpecialTokens_ShouldReturnEmpty()
     {
@@ -128,6 +149,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Empty(tokens);
     }
 
+    /// <summary>
+    /// Tests that the Encode method wraps the tokens with BOS and EOS tokens.
+    /// </summary>
     [Fact]
     public void Encode_WithBosAndEos_ShouldWrapTokens()
     {
@@ -154,6 +178,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal(2, tokens[^1]);               // EOS
     }
 
+    /// <summary>
+    /// Tests that the Encode method applies BPE merges for a simple word.
+    /// </summary>
     [Fact]
     public void Encode_SimpleWord_ShouldApplyBpeMerges()
     {
@@ -165,6 +192,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Contains(21, tokens);
     }
 
+    /// <summary>
+    /// Tests that the Encode method uses the unknown token ID for unknown characters.
+    /// </summary>
     [Fact]
     public void Encode_UnknownCharacter_ShouldUseUnknownTokenId()
     {
@@ -189,6 +219,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Contains(0, tokens);
     }
 
+    /// <summary>
+    /// Tests that the Decode method throws an exception when the input tokens are null.
+    /// </summary>
     [Fact]
     public void Decode_WithNull_ShouldThrow()
     {
@@ -198,6 +231,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Throws<ArgumentNullException>(() => tokenizer.Decode(null));
     }
 
+    /// <summary>
+    /// Tests that the Decode method correctly removes the space symbol.
+    /// </summary>
     [Fact]
     public void Decode_ShouldRemoveSpaceSymbol()
     {
@@ -209,6 +245,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("hello", text);
     }
 
+    /// <summary>
+    /// Tests that the Decode method produces correct spaces between multiple words.
+    /// </summary>
     [Fact]
     public void Decode_MultipleWords_ShouldProduceCorrectSpaces()
     {
@@ -220,6 +259,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("hello world", text);
     }
 
+    /// <summary>
+    /// Tests that the Decode method skips BOS and EOS tokens.
+    /// </summary>
     [Fact]
     public void Decode_ShouldSkipBosAndEos()
     {
@@ -231,6 +273,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("hello world", text);
     }
 
+    /// <summary>
+    /// Tests that the Decode method outputs the unknown marker for an unknown token ID.
+    /// </summary>
     [Fact]
     public void Decode_UnknownTokenId_ShouldOutputUnkMarker()
     {
@@ -242,6 +287,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("<unk>", text);
     }
 
+    /// <summary>
+    /// Tests that the Encode and Decode methods are reversible.
+    /// </summary>
     [Fact]
     public void EncodeDecode_RoundTrip_ShouldBeReversible()
     {
@@ -254,6 +302,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("hello", decoded);
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from vocabulary and merges works correctly.
+    /// </summary>
     [Fact]
     public void FromVocabularyAndMerges_ShouldCreateFunctionalTokenizer()
     {
@@ -293,6 +344,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Contains(8, tokens);
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from vocabulary and merges respects the BOS and EOS configuration.
+    /// </summary>
     [Fact]
     public void FromVocabularyAndMerges_WithConfigBosEos_ShouldRespectConfig()
     {
@@ -323,12 +377,18 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal(2, tokens[^1]); // EOS
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a null JSON path throws an exception.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithNullPath_ShouldThrow()
     {
         Assert.Throws<ArgumentException>(() => GemmaTokenizer.FromTokenizerJson(null));
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a non-existent JSON file throws an exception.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithNonexistentFile_ShouldThrow()
     {
@@ -336,6 +396,9 @@ public sealed class UnitTestGemmaTokenizer
             GemmaTokenizer.FromTokenizerJson("/nonexistent/tokenizer.json"));
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a JSON file with a missing model section throws an exception.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithMissingModelSection_ShouldThrow()
     {
@@ -352,6 +415,9 @@ public sealed class UnitTestGemmaTokenizer
         }
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a valid JSON file works correctly.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithValidJson_ShouldCreateFunctionalTokenizer()
     {
@@ -406,6 +472,9 @@ public sealed class UnitTestGemmaTokenizer
         }
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a JSON file with array merges works correctly.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithArrayMerges_ShouldCreateFunctionalTokenizer()
     {
@@ -464,6 +533,9 @@ public sealed class UnitTestGemmaTokenizer
         }
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a JSON file resolves custom BOS and EOS token names correctly.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithCustomBosEosTokenNames_ShouldResolveFromConfig()
     {
@@ -513,6 +585,9 @@ public sealed class UnitTestGemmaTokenizer
         }
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from a JSON file with an empty vocabulary throws an exception.
+    /// </summary>
     [Fact]
     public void FromTokenizerJson_WithEmptyVocab_ShouldThrow()
     {
@@ -529,6 +604,9 @@ public sealed class UnitTestGemmaTokenizer
         }
     }
 
+    /// <summary>
+    /// Tests that creating a tokenizer from vocabulary and merges resolves custom BOS and EOS token IDs correctly.
+    /// </summary>
     [Fact]
     public void FromVocabularyAndMerges_WithConfigBosEosTokenNames_ShouldResolveCorrectIds()
     {
@@ -559,6 +637,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal(1, tokens[^1]);  // <eos>
     }
 
+    /// <summary>
+    /// Tests that normalization applies NFKC.
+    /// </summary>
     [Fact]
     public void Normalize_ShouldApplyNfkc()
     {
@@ -568,6 +649,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("fi", result);
     }
 
+    /// <summary>
+    /// Tests that normalization does not change ASCII text.
+    /// </summary>
     [Fact]
     public void Normalize_AsciiText_ShouldBeUnchanged()
     {
@@ -576,6 +660,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("hello world", result);
     }
 
+    /// <summary>
+    /// Tests that pre-tokenization splits on whitespace.
+    /// </summary>
     [Fact]
     public void PreTokenize_ShouldSplitOnWhitespace()
     {
@@ -586,6 +673,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("\u2581world", words[1]);
     }
 
+    /// <summary>
+    /// Tests that pre-tokenization prefixes a single word with the space symbol.
+    /// </summary>
     [Fact]
     public void PreTokenize_SingleWord_ShouldPrefixWithSpaceSymbol()
     {
@@ -595,6 +685,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Equal("\u2581hello", words[0]);
     }
 
+    /// <summary>
+    /// Tests that pre-tokenization of an empty string returns an empty list.
+    /// </summary>
     [Fact]
     public void PreTokenize_EmptyString_ShouldReturnEmpty()
     {
@@ -603,6 +696,9 @@ public sealed class UnitTestGemmaTokenizer
         Assert.Empty(words);
     }
 
+    /// <summary>
+    /// Tests that the space symbol is the correct Unicode character.
+    /// </summary>
     [Fact]
     public void SpaceSymbol_ShouldBeCorrectUnicodeCharacter()
     {
