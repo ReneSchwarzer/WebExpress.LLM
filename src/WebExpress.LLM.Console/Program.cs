@@ -40,8 +40,7 @@ internal class Program
         {
             var configLoader = new ConfigurationLoader();
             config = configLoader.Load(configPath);
-            System.Console.WriteLine($"Configuration loaded: {config.ModelName}");
-            System.Console.WriteLine();
+            System.Console.WriteLine($"Model path loaded: {config.ModelPath}");
         }
         catch (Exception ex)
         {
@@ -71,14 +70,13 @@ internal class Program
         else if (Directory.Exists(config.ModelPath))
         {
             // load the actual model from the configured path
-            System.Console.WriteLine($"Loading model from: {config.ModelPath}");
-            System.Console.WriteLine();
+            System.Console.WriteLine($"Loading model: {config.ModelName}");
 
             try
             {
-                // Load the model configuration and weights from the specified directory
+                // load the model configuration and weights from the specified directory
                 var loader = new ModelLoader();
-                model = loader.Load(config.ModelPath);
+                model = loader.Load(Path.Combine(config.ModelPath, config.ModelName));
 
                 // create generation configuration from application settings
                 var generationConfig = new GenerationConfig
@@ -94,19 +92,18 @@ internal class Program
                 var samplingStrategy = generationConfig.CreateSamplingStrategy();
                 inferenceEngine = new TransformerInferenceEngine(model, samplingStrategy);
 
-                System.Console.WriteLine("Model loaded successfully.");
-                System.Console.WriteLine($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
+                System.Console.Write($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
                 if (config.TopK.HasValue)
                 {
-                    System.Console.WriteLine($"  Sampling: Top-K (k={config.TopK.Value})");
+                    System.Console.WriteLine($", Sampling: Top-K (k={config.TopK.Value})");
                 }
                 else if (config.TopP.HasValue)
                 {
-                    System.Console.WriteLine($"  Sampling: Top-P (p={config.TopP.Value})");
+                    System.Console.WriteLine($", Sampling: Top-P (p={config.TopP.Value})");
                 }
                 else
                 {
-                    System.Console.WriteLine("  Sampling: Greedy");
+                    System.Console.WriteLine(", Sampling: Greedy");
                 }
                 System.Console.WriteLine();
             }

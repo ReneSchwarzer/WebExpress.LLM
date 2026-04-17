@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <config version="1">
-	<!-- Model configuration: defines which model to load and where to find it -->
-	<model name="google/gemma-4-E2B-it">
-		<path>../../../../../model/google/gemma-4-26B-A4B-it</path>
-	</model>
+	<!-- Model path: defines base path to load models -->
+	<path>../../../../../models</path>
+	<!-- Model configuration: defines which model to load -->
+	<model>google/gemma-4-26B-A4B-it</model>
 
 	<!-- Inference configuration: controls text generation behavior -->
 	<inference>
@@ -11,7 +11,7 @@
 		<maxNewTokens>100</maxNewTokens>
 
 		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
-		<temperature>1.0</temperature>
+		<temperature>0.0</temperature>
 
 		<!-- Top-K sampling: sample from top K tokens (uncomment to enable) -->
 		<!-- <topK>50</topK> -->
