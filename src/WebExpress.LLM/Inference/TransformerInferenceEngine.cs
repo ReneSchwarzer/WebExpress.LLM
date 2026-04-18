@@ -111,6 +111,15 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
     /// Asynchronously generates tokens one at a time, yielding each token as it is produced.
     /// This enables streaming token generation for real-time display in chat interfaces.
     /// </summary>
+    /// <remarks>
+    /// Generates new tokens autoregressively from a given prompt sequence using the model.
+    /// For each token step:
+    /// - Runs a forward pass using the full current context
+    /// - Selects the next token index based on the configured sampling strategy (e.g., argmax or probabilistic sampling)
+    /// - Streams each generated token asynchronously via yield
+    /// - Extends the context with the new token and manages context length according to model limits
+    /// Designed for efficient asynchronous streaming in interactive or server applications.
+    /// </remarks>
     /// <param name="promptTokens">The sequence of input tokens that serves as the initial context for generation. Cannot be null.</param>
     /// <param name="maxNewTokens">The maximum number of new tokens to generate. Must be greater than or equal to zero.</param>
     /// <returns>An async enumerable that yields generated tokens one at a time.</returns>

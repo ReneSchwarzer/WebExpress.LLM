@@ -17,6 +17,15 @@ public sealed class FeedForward
     /// <summary>
     /// Computes the feed-forward network forward pass.
     /// </summary>
+    /// <remarks>
+    /// Implements the gated feed-forward block found in modern transformer architectures (e.g., Gemma, Llama).
+    /// Steps:
+    /// - Projects the input into two intermediate representations (gate and up) using independent weight matrices.
+    /// - Applies the GELU activation to the gate projection.
+    /// - Multiplies the activated gate element-wise with the up projection (gating mechanism).
+    /// - Projects the result back to the hidden size using a final linear transformation ("down" projection).
+    /// Produces the output tensor for residual addition after the feed-forward block.
+    /// </remarks>
     /// <param name="input">Input tensor of shape [seqLen, hiddenSize].</param>
     /// <param name="gateWeight">Gate projection weight [intermediateSize, hiddenSize].</param>
     /// <param name="upWeight">Up projection weight [intermediateSize, hiddenSize].</param>

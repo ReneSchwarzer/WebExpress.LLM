@@ -158,6 +158,13 @@ public static class TensorOperations
     /// <summary>
     /// Applies RMS (Root Mean Square) normalization along the last dimension.
     /// </summary>
+    /// <remarks>
+    /// Applies Root Mean Square Layer Normalization (RMSNorm) across the last dimension of the input tensor.
+    /// For each vector along the last axis, computes the root mean square, normalizes, and scales by a learned weight.
+    /// Formula:
+    ///   y_i = (x_i / sqrt(mean_j(x_j^2) + epsilon)) * weight_i
+    /// Used in transformer models such as Gemma and Llama as a stable normalization technique.
+    /// </remarks>
     /// <param name="input">The input tensor.</param>
     /// <param name="weight">The normalization weight tensor (1D, same size as last dimension).</param>
     /// <param name="epsilon">Small constant for numerical stability.</param>
@@ -180,7 +187,8 @@ public static class TensorOperations
         var result = new float[data.Length];
         var outerSize = data.Length / lastDim;
 
-        for (var outer = 0; outer < outerSize; outer++)
+        Parallel.For(0, outerSize, outer =>
+        //for (var outer = 0; outer < outerSize; outer++)
         {
             var offset = outer * lastDim;
 
@@ -199,7 +207,7 @@ public static class TensorOperations
             {
                 result[offset + i] = data[offset + i] / rms * wData[i];
             }
-        }
+        });
 
         return new Tensor(ToIntArray(input.Shape), result);
     }
@@ -378,6 +386,13 @@ public static class TensorOperations
     /// <summary>
     /// Looks up embedding vectors for the given token IDs from an embedding weight matrix.
     /// </summary>
+    /// <remarks>
+    /// Looks up the embedding vector for each token in the input sequence.
+    /// For each token ID, copies the corresponding row from the embedding weight matrix
+    /// ([vocab_size, hidden_size]) to the result tensor ([seq_len, hidden_size]).
+    /// This operation is typically used as the first step in a transformer model's forward pass.
+    /// Throws an exception if a token ID is out of range.
+    /// </remarks>
     /// <param name="embeddingWeights">The embedding weight matrix [vocab_size, hidden_size].</param>
     /// <param name="tokenIds">The token IDs to look up.</param>
     /// <returns>A [seq_len, hidden_size] tensor of embedded tokens.</returns>

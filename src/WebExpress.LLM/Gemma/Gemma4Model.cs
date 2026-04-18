@@ -49,6 +49,21 @@ public sealed class Gemma4Model
     /// Performs a complete forward pass through the model, returning logits for
     /// the last token position.
     /// </summary>
+    /// <remarks>
+    /// Forward pass steps for Gemma 4:
+    /// - Tokenize input text
+    /// - Lookup embeddings for token IDs and scale by sqrt(hidden_size)
+    /// - For each transformer layer (0..N-1):
+    ///   - Apply RMS normalization to the input
+    ///   - Multi-head attention with RoPE, sliding/global attention, and optional KV cache
+    ///   - Add residual connection
+    ///   - Apply RMS normalization after attention
+    ///   - Feed-forward network (Dense or MoE/Gated, e.g. with GeLU activation)
+    ///   - Add residual connection
+    /// - Final RMS normalization
+    /// - Project to vocabulary logits via matrix multiplication
+    /// - (Optional) Apply logit scaling, softmax, and/or sampling as configured
+    /// </remarks>
     /// <param name="tokenIds">The input token IDs.</param>
     /// <returns>An array of logit values, one per vocabulary entry.</returns>
     public float[] Forward(int[] tokenIds)
@@ -118,6 +133,23 @@ public sealed class Gemma4Model
     /// <summary>
     /// Processes a single transformer layer.
     /// </summary>
+    /// <remarks>
+    /// Performs all operations for a single transformer layer as used in Gemma 4.
+    /// Steps:
+    /// - Applies RMS normalization to the input hidden state.
+    /// - Computes multi-head attention (with rotary embeddings, attention type, and key-value sharing as configured).
+    /// - Adds the attention output via a residual connection.
+    /// - Applies RMS normalization after the attention block.
+    /// - Runs the feed-forward sublayer (e.g., gated or MoE variant as configured).
+    /// - Adds the feed-forward output via a second residual connection.
+    /// Layer-specific weights and attention settings are loaded dynamically for each layer and configuration.
+    /// </remarks>
+    /// <param name="hidden">The input hidden state tensor for this layer.</param>
+    /// <param name="layerIndex">The index of the transformer layer (0-based).</param>
+    /// <param name="numQueryHeads">The number of query heads for multi-head attention.</param>
+    /// <param name="numKvHeads">The number of key-value heads for multi-head attention.</param>
+    /// <param name="headDim">The dimension of each attention head.</param>
+    /// <param name="rmsEps">The epsilon value for RMS normalization.</param>
     private Tensor.Tensor TransformerLayer(
         Tensor.Tensor hidden, int layerIndex,
         int numQueryHeads, int numKvHeads, int headDim, float rmsEps)

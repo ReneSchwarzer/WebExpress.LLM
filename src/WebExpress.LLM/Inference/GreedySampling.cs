@@ -11,6 +11,11 @@ public sealed class GreedySampling : ISamplingStrategy
     /// <summary>
     /// Finds the index of the highest value in the specified list of logits.
     /// </summary>
+    /// <remarks>
+    /// Selects the index of the maximum value in the input logits (greedy argmax sampling).
+    /// This method is typically used in language model decoding to deterministically choose the most likely next token.
+    /// Returns the first index in case of ties.
+    /// </remarks>
     /// <param name="logits">
     /// The read‑only list of floating‑point numbers from which the index of the maximum value is determined.  
     /// Must not be null or empty.

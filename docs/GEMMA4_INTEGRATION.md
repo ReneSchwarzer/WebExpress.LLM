@@ -2,17 +2,61 @@
 
 ## Current State
 
-The `TransformerInferenceEngine` is now a **fully functional implementation** of the Gemma-4 transformer architecture. It supports both high-performance sharded model loading and single-file SafeTensors, performing a complete forward pass through all 35 transformer layers.
+The `TransformerInferenceEngine` is a **fully functional implementation** of the Gemma-4 transformer architecture. It supports both high-performance sharded model loading and single-file SafeTensors, performing a complete forward pass through all 35 transformer layers.
 
-### What Works Now
-- ✅ **Full Transformer Inference**: Complete forward pass with attention, normalization, and FFN.
-- ✅ **Custom Tensor Library**: Efficient, native .NET tensor implementation in `WebExpress.LLM.Tensor`.
-- ✅ **Async Streaming**: Real-time token generation with `IAsyncEnumerable<int>`.
-- ✅ **Sharded Weight Loading**: Efficiently handle multi-file models (e.g., `model-00001-of-00002.safetensors`).
-- ✅ **Memory-Mapped Files**: Native support for large model weights (>2GB) using shared memory.
-- ✅ **KV Cache**: Efficient autoregressive generation by caching previous keys and values.
-- ✅ **Sampling Strategies**: Greedy, Top-K, and Top-P sampling implemented.
-- ✅ **ByteTokenizer**: Full UTF-8 support for robust encoding/decoding.
+## Process Flow
+
+The following process flow outlines each step performed by a Gemma 4 large language model when generating a response to an input prompt.
+It describes how user input is transformed into model-understandable tokens, processed through successive layers of neural computation, and finally decoded back into human-readable output.
+Understanding this pipeline is essential for anyone integrating, optimizing, or analyzing inference behavior in Gemma-based systems.
+Each step ensures that the model makes maximum use of its architecture to provide coherent, context-aware responses.
+
+1. **User Input Reception:** The user provides an input string—such as a question, command, or conversation prompt—intended for the model.
+
+2. **Tokenization:** The input string is transformed into a sequence of numerical token IDs using the model's specific tokenizer. This ensures text is in the discrete form the neural network expects.
+Additional formatting or system tokens may be applied for chat, role-play, or instruction-following.
+
+3. **Embedding Lookup:** The list of token IDs is mapped to vectors using the embedding matrix ([vocab_size, hidden_size]) provided by the model. Each ID selects an embedding vector. This results in an embedding tensor of shape `[seq_len, hidden_size]`.
+
+4. **Embedding Scaling:** The embeddings are scaled—typically by multiplying with sqrt(hidden_size)—which stabilizes the input variance as described in the model’s paper.
+
+5. **Passing Through Transformer Layers:** For each transformer layer (Gemma 4 use 30 layers, depending on the variant) the following sub-steps are repeated sequentially:
+
+    a. **RMS Normalization:** The current hidden tensor is normalized using RMSNorm (Root Mean Square Layer Norm), improving training and inference stability without the need for learned bias parameters.
+
+    b. **Multi-Head Self-Attention:** The hidden tensor is projected into queries, keys, and values via learned linear weights. Rotary position embeddings (RoPE) are applied to inject positional information. Depending on the layer, attention may be "sliding window" (local neighborhoods) or "full" (global tokens). The attention operation computes context-aware representations by mixing token information, potentially using a key-value cache for efficient long-sequence generation.
+     
+    c. **Residual Connection:** The output of the self-attention is added back to the input of the block, preserving direct information flow as in all transformers.
+
+    d. **Second RMS Normalization:** The tensor is normalized again, prior to the feed-forward operation.
+
+    e. **Feed-Forward Neural Network (FFN / MoE / Gated FFN):** Each position undergoes a two- or three-layer neural network (often with gating/sparse Mixture-of-Experts in larger models), enabling richer nonlinear transformations.
+
+    f. **Second Residual Connection:** The output of the feed-forward block is again added to the incoming tensor (post-attention), completing the transformer layer.
+
+6. **Final RMS Normalization:** Once all layers have been processed, a final RMSNorm is applied to the tensor, ensuring model output consistency.
+
+7. **Projection to Vocabulary Logits:** The hidden state for the last processed token (position) is multiplied (dot product) with the transpose of the embedding matrix (or a dedicated output matrix), converting [hidden_size] to [vocab_size]—one score per possible next token.
+
+8. **Logit Processing and Sampling:** The logits (raw scores) may optionally be transformed by: 
+
+    Applying temperature scaling Softmax or logit-capping (e.g., tanh with temperature, as in some Gemma variants) Then, the model samples the next token: Greedy (argmax): always picks the highest-scoring token. Stochastic (sampling): samples according to probability, possibly using nucleus/top-p or similar strategies. This determines the next token’s index.
+
+9. **Autoregressive Decoding Loop (for generating multiple tokens);** The predicted token is appended to the context. The process from step 5 onward is repeated until the desired number of tokens is generated or a stop condition (such as EOS token) is met. Optimally, KV-caches and attention masks are managed so only new parts of the sequence are processed repeatedly.
+
+10. **Detokenization:** The generated sequence of token IDs is mapped back to text using the inverse of the tokenizer, reconstructing human-readable output.
+
+11. **Delivering the Model Output:** The generated text (possibly streamed token-by-token or as one complete response) is presented to the user as the model's reply.
+
+### What Works
+- **Full Transformer Inference**: Complete forward pass with attention, normalization, and FFN.
+- **Custom Tensor Library**: Efficient, native .NET tensor implementation in `WebExpress.LLM.Tensor`.
+- **Async Streaming**: Real-time token generation with `IAsyncEnumerable<int>`.
+- **Sharded Weight Loading**: Efficiently handle multi-file models (e.g., `model-00001-of-00002.safetensors`).
+- **Memory-Mapped Files**: Native support for large model weights (>2GB) using shared memory.
+- **KV Cache**: Efficient autoregressive generation by caching previous keys and values.
+- **Sampling Strategies**: Greedy, Top-K, and Top-P sampling implemented.
+- **ByteTokenizer**: Full UTF-8 support for robust encoding/decoding.
 
 ### Fallback Mechanism
 If valid SafeTensors weights are not available or the model format is unsupported, the engine falls back to a **placeholder implementation** that generates readable English-biased text for development and integration testing.

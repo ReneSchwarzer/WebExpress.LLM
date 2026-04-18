@@ -125,7 +125,7 @@ public sealed class ChatSession
             responseTokens.Add(token);
             var decodedText = _tokenizer.Decode([token]);
             responseBuilder.Append(decodedText);
-            yield return decodedText;
+            yield return decodedText.Trim() + " ";
         }
 
         var assistant = new ChatMessage("assistant", responseBuilder.ToString());
