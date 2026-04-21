@@ -35,4 +35,14 @@ public interface ISafeTensorLoader
     /// <returns>A <see cref="Tensor.Tensor"/> containing the tensor data as float32.</returns>
     /// <exception cref="KeyNotFoundException">Thrown when the tensor name is not found.</exception>
     Tensor.Tensor LoadTensor(string name);
+
+    /// <summary>
+    /// Loads the tensor with the specified name if it exists, or returns <c>null</c> otherwise.
+    /// </summary>
+    /// <param name="name">The name of the tensor to load.</param>
+    /// <returns>The loaded tensor, or <c>null</c> if no tensor with the given name exists.</returns>
+    Tensor.Tensor TryLoadTensor(string name)
+    {
+        return ContainsTensor(name) ? LoadTensor(name) : null;
+    }
 }

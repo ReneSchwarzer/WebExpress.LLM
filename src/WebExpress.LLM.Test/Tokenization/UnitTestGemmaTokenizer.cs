@@ -109,6 +109,46 @@ public sealed class UnitTestGemmaTokenizer
     }
 
     /// <summary>
+    /// Verifies that the Gemma vocabulary distinguishes word-initial tokens (prefixed with ▁
+    /// after the space→▁ normalization) from bare tokens. "Hallo" must resolve to 45890 while
+    /// " Hallo" must resolve to the distinct "▁Hallo" entry at 203065.
+    /// </summary>
+    [Theory]
+    [InlineData("Hallo", new[] { 45890 })]
+    [InlineData(" Hallo", new[] { 203065 })]
+    [InlineData("<bos>", new[] { 2 })]
+    [InlineData("<eos>", new[] { 1 })]
+    [InlineData("<", new[] { 236820 })]
+    [InlineData("<bos><|turn>user", new[] { 2, 105, 2364 })]
+    [InlineData("<bos><|turn>user\nHallo<turn|>", new[] { 2, 105, 2364, 107, 45890, 106 })]
+    public void Encode(string input, int[] expected)
+    {
+        // prepare
+        var vocab = new Dictionary<string, int>
+        {
+            ["<unk>"] = 0,
+            ["<bos>"] = 2,
+            ["<eos>"] = 1,
+            ["<|turn>"] = 105,
+            ["<turn|>"] = 106,
+            ["\n"] = 107,
+            ["user"] = 2364,
+            ["Hallo"] = 45890,
+            ["\u2581Hallo"] = 203065,
+            ["h"] = 236754,
+            ["<"] = 236820,
+        };
+        var merges = new List<(string, string)>();
+        var tokenizer = new GemmaTokenizer(vocab, merges, addBosToken: false);
+
+        // act
+        var token = tokenizer.Encode(input);
+
+        // validation
+        Assert.Equal(expected, token);
+    }
+
+    /// <summary>
     /// Tests that the Encode method throws an exception when the input text is null.
     /// </summary>
     [Fact]
@@ -171,7 +211,9 @@ public sealed class UnitTestGemmaTokenizer
         var tokenizer = new GemmaTokenizer(vocab, merges,
             bosTokenId: 1, eosTokenId: 2, addBosToken: true, addEosToken: true);
 
-        var tokens = tokenizer.Encode("a");
+        // Leading space triggers the normalizer's " " -> "▁" replacement so the
+        // resulting token matches the "▁a" vocabulary entry at ID 3.
+        var tokens = tokenizer.Encode(" a");
 
         Assert.Equal(1, tokens[0]);                // BOS
         Assert.Equal(3, tokens[1]);                // ▁a
@@ -187,7 +229,8 @@ public sealed class UnitTestGemmaTokenizer
         var (vocab, merges) = CreateTestVocabulary();
         var tokenizer = new GemmaTokenizer(vocab, merges, addBosToken: false, addEosToken: false);
 
-        var tokens = tokenizer.Encode("hello");
+        // Leading space normalizes to ▁, so BPE merges resolve to the "▁hello" vocab entry.
+        var tokens = tokenizer.Encode(" hello");
 
         Assert.Contains(21, tokens);
     }
@@ -240,7 +283,7 @@ public sealed class UnitTestGemmaTokenizer
         var (vocab, merges) = CreateTestVocabulary();
         var tokenizer = new GemmaTokenizer(vocab, merges, addBosToken: false);
 
-        var text = tokenizer.Decode(new[] { 21 });
+        var text = tokenizer.Decode([21]);
 
         Assert.Equal("hello", text);
     }
@@ -254,7 +297,7 @@ public sealed class UnitTestGemmaTokenizer
         var (vocab, merges) = CreateTestVocabulary();
         var tokenizer = new GemmaTokenizer(vocab, merges, addBosToken: false);
 
-        var text = tokenizer.Decode(new[] { 21, 28 });
+        var text = tokenizer.Decode([21, 28]);
 
         Assert.Equal("hello world", text);
     }
@@ -339,7 +382,7 @@ public sealed class UnitTestGemmaTokenizer
 
         var tokenizer = GemmaTokenizer.FromVocabularyAndMerges(vocab, mergeStrings, config);
 
-        var tokens = tokenizer.Encode("ab");
+        var tokens = tokenizer.Encode(" ab");
 
         Assert.Contains(8, tokens);
     }
@@ -462,7 +505,7 @@ public sealed class UnitTestGemmaTokenizer
             }
             """);
             var tokenizer = GemmaTokenizer.FromTokenizerJson(tempFile, config);
-            var tokens = tokenizer.Encode("ab");
+            var tokens = tokenizer.Encode(" ab");
 
             Assert.Contains(8, tokens);
         }
@@ -523,7 +566,7 @@ public sealed class UnitTestGemmaTokenizer
             """);
 
             var tokenizer = GemmaTokenizer.FromTokenizerJson(tempFile, config);
-            var tokens = tokenizer.Encode("ab");
+            var tokens = tokenizer.Encode(" ab");
 
             Assert.Contains(8, tokens);
         }
@@ -650,50 +693,15 @@ public sealed class UnitTestGemmaTokenizer
     }
 
     /// <summary>
-    /// Tests that normalization does not change ASCII text.
+    /// Tests that normalization replaces regular spaces with the ▁ space symbol, matching
+    /// the Replace normalizer declared in Gemma's tokenizer.json.
     /// </summary>
     [Fact]
-    public void Normalize_AsciiText_ShouldBeUnchanged()
+    public void Normalize_Space_ShouldBeReplacedBySpaceSymbol()
     {
         var result = GemmaTokenizer.Normalize("hello world");
 
-        Assert.Equal("hello world", result);
-    }
-
-    /// <summary>
-    /// Tests that pre-tokenization splits on whitespace.
-    /// </summary>
-    [Fact]
-    public void PreTokenize_ShouldSplitOnWhitespace()
-    {
-        var words = GemmaTokenizer.PreTokenize("hello world");
-
-        Assert.Equal(2, words.Count);
-        Assert.Equal("\u2581hello", words[0]);
-        Assert.Equal("\u2581world", words[1]);
-    }
-
-    /// <summary>
-    /// Tests that pre-tokenization prefixes a single word with the space symbol.
-    /// </summary>
-    [Fact]
-    public void PreTokenize_SingleWord_ShouldPrefixWithSpaceSymbol()
-    {
-        var words = GemmaTokenizer.PreTokenize("hello");
-
-        Assert.Single(words);
-        Assert.Equal("\u2581hello", words[0]);
-    }
-
-    /// <summary>
-    /// Tests that pre-tokenization of an empty string returns an empty list.
-    /// </summary>
-    [Fact]
-    public void PreTokenize_EmptyString_ShouldReturnEmpty()
-    {
-        var words = GemmaTokenizer.PreTokenize("");
-
-        Assert.Empty(words);
+        Assert.Equal("hello\u2581world", result);
     }
 
     /// <summary>
@@ -703,5 +711,29 @@ public sealed class UnitTestGemmaTokenizer
     public void SpaceSymbol_ShouldBeCorrectUnicodeCharacter()
     {
         Assert.Equal('\u2581', GemmaTokenizer.SpaceSymbol);
+    }
+
+    /// <summary>
+    /// Integration test against the real Gemma-4 tokenizer.json shipped under models/.
+    /// Verifies that "Hallo" (no leading space) resolves to the bare-token ID 45890 and
+    /// " Hallo" (with leading space) resolves to the distinct "▁Hallo" ID 203065.
+    /// Skipped silently when the model weights are not present in the checkout.
+    /// </summary>
+    [Fact]
+    public void Encode_WithRealGemmaTokenizer_MatchesHuggingFaceIds()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+            "models", "google", "gemma-4-26B-A4B-it", "tokenizer.json");
+
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        var tokenizer = GemmaTokenizer.FromTokenizerJson(path);
+
+        Assert.Equal(new[] { 2, 45890 }, tokenizer.Encode("Hallo"));
+        Assert.Equal(new[] { 2, 203065 }, tokenizer.Encode(" Hallo"));
     }
 }

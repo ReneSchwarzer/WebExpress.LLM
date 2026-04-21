@@ -13,13 +13,13 @@
 		<maxNewTokens>100</maxNewTokens>
 
 		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
-		<temperature>0.0</temperature>
+		<temperature>1.0</temperature>
 
 		<!-- Top-K sampling: sample from top K tokens (uncomment to enable) -->
-		<!-- <topK>50</topK> -->
+		<!--<topK>64</topK>-->
 
 		<!-- Top-P (nucleus) sampling: sample from tokens with cumulative probability P (uncomment to enable) -->
-		<!-- <topP>0.9</topP> -->
+		<topP>0.95</topP>
 
 		<!-- Seed for deterministic random generation (uncomment to enable) -->
 		<!-- <seed>42</seed> -->

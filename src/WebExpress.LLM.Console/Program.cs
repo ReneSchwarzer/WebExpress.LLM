@@ -171,6 +171,7 @@ internal class Program
             {
                 // handle any errors that occur during message processing
                 System.Console.WriteLine($"Error: {ex.Message}");
+                System.Console.WriteLine($"{ex.StackTrace}");
                 System.Console.WriteLine();
             }
         }

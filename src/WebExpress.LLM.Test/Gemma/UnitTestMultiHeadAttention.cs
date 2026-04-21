@@ -224,6 +224,176 @@ public sealed class UnitTestMultiHeadAttention
             new MultiHeadAttention(2, 1, 4, true, 512, null));
     }
 
+    /// <summary>
+    /// Tests that passing q_norm and k_norm weights of all ones leaves Q and K
+    /// unit-normalised over head_dim (i.e. the attention output changes compared
+    /// to the null-norm baseline, but stays finite and deterministic).
+    /// </summary>
+    [Fact]
+    public void Forward_WithQkNorm_ShouldAffectOutputDeterministically()
+    {
+        var numQueryHeads = 2;
+        var numKvHeads = 1;
+        var headDim = 4;
+        var hiddenSize = numQueryHeads * headDim;
+        var seqLen = 3;
+
+        var rope = new RotaryEmbedding(theta: 10000);
+        var attention = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, headDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope);
+
+        var input = CreateInput(seqLen, hiddenSize);
+
+        var qWeight = CreateWeight(numQueryHeads * headDim, hiddenSize);
+        var kWeight = CreateWeight(numKvHeads * headDim, hiddenSize);
+        var vWeight = CreateWeight(numKvHeads * headDim, hiddenSize);
+        var oWeight = CreateWeight(hiddenSize, numQueryHeads * headDim);
+
+        // q_norm / k_norm of shape [headDim]; values are all ones so that
+        // RmsNorm acts as pure L2-normalisation along the head dimension.
+        var qNormData = new float[headDim];
+        var kNormData = new float[headDim];
+
+        for (var i = 0; i < headDim; i++)
+        {
+            qNormData[i] = 1f;
+            kNormData[i] = 1f;
+        }
+
+        var qNorm = new WebExpress.LLM.Tensor.Tensor([headDim], qNormData);
+        var kNorm = new WebExpress.LLM.Tensor.Tensor([headDim], kNormData);
+
+        var withoutNorm = attention.Forward(input, qWeight, kWeight, vWeight, oWeight);
+        var withNorm = attention.Forward(
+            input, qWeight, kWeight, vWeight, oWeight,
+            kvCache: null, layerIndex: 0,
+            qNormWeight: qNorm, kNormWeight: kNorm, rmsNormEpsilon: 1e-6f);
+
+        // Shapes must match
+        Assert.Equal(withoutNorm.Shape[0], withNorm.Shape[0]);
+        Assert.Equal(withoutNorm.Shape[1], withNorm.Shape[1]);
+
+        // Output must change when norms are applied
+        var anyDifference = false;
+
+        for (var i = 0; i < withoutNorm.Length; i++)
+        {
+            Assert.False(float.IsNaN(withNorm.Data[i]));
+            Assert.False(float.IsInfinity(withNorm.Data[i]));
+
+            if (MathF.Abs(withoutNorm.Data[i] - withNorm.Data[i]) > 1e-5f)
+            {
+                anyDifference = true;
+            }
+        }
+
+        Assert.True(anyDifference);
+
+        // Determinism: same inputs + same norms yield identical outputs
+        var withNorm2 = attention.Forward(
+            input, qWeight, kWeight, vWeight, oWeight,
+            kvCache: null, layerIndex: 0,
+            qNormWeight: qNorm, kNormWeight: kNorm, rmsNormEpsilon: 1e-6f);
+
+        for (var i = 0; i < withNorm.Length; i++)
+        {
+            Assert.Equal(withNorm.Data[i], withNorm2.Data[i], 1e-6f);
+        }
+    }
+
+    /// <summary>
+    /// Tests that enabling an attention-logits soft cap produces a different
+    /// (bounded) output compared to the uncapped baseline, and that the result
+    /// remains deterministic.
+    /// </summary>
+    [Fact]
+    public void Forward_WithAttentionLogitsSoftcap_ShouldBoundScoresAndStayDeterministic()
+    {
+        var numQueryHeads = 2;
+        var numKvHeads = 1;
+        var headDim = 4;
+        var hiddenSize = numQueryHeads * headDim;
+        var seqLen = 4;
+
+        var rope = new RotaryEmbedding(theta: 10000);
+
+        // Large weights so raw scores exceed the cap significantly.
+        var qWeight = CreateLargeWeight(numQueryHeads * headDim, hiddenSize);
+        var kWeight = CreateLargeWeight(numKvHeads * headDim, hiddenSize);
+        var vWeight = CreateLargeWeight(numKvHeads * headDim, hiddenSize);
+        var oWeight = CreateLargeWeight(hiddenSize, numQueryHeads * headDim);
+        var input = CreateLargeInput(seqLen, hiddenSize);
+
+        var baseline = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, headDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope,
+            attentionLogitsSoftcap: 0f);
+        var baselineOut = baseline.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        var capped = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, headDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope,
+            attentionLogitsSoftcap: 1.0f);
+        var cappedOut = capped.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        // Shapes match
+        Assert.Equal(baselineOut.Shape[0], cappedOut.Shape[0]);
+        Assert.Equal(baselineOut.Shape[1], cappedOut.Shape[1]);
+
+        // Soft cap must change the output (scores pre-softmax were clearly > 1)
+        var anyDifference = false;
+
+        for (var i = 0; i < baselineOut.Length; i++)
+        {
+            Assert.False(float.IsNaN(cappedOut.Data[i]));
+            Assert.False(float.IsInfinity(cappedOut.Data[i]));
+
+            if (MathF.Abs(baselineOut.Data[i] - cappedOut.Data[i]) > 1e-5f)
+            {
+                anyDifference = true;
+            }
+        }
+
+        Assert.True(anyDifference);
+
+        // Determinism: rerun with the same cap produces identical output.
+        var capped2 = new MultiHeadAttention(
+            numQueryHeads, numKvHeads, headDim,
+            isFullAttention: true, slidingWindowSize: 512, rope: rope,
+            attentionLogitsSoftcap: 1.0f);
+        var cappedOut2 = capped2.Forward(input, qWeight, kWeight, vWeight, oWeight);
+
+        for (var i = 0; i < cappedOut.Length; i++)
+        {
+            Assert.Equal(cappedOut.Data[i], cappedOut2.Data[i], 1e-6f);
+        }
+    }
+
+    private static WebExpress.LLM.Tensor.Tensor CreateLargeWeight(int rows, int cols)
+    {
+        var data = new float[rows * cols];
+
+        for (var i = 0; i < data.Length; i++)
+        {
+            data[i] = ((i * 7 + 3) % 11 - 5) * 0.5f;
+        }
+
+        return new WebExpress.LLM.Tensor.Tensor([rows, cols], data);
+    }
+
+    private static WebExpress.LLM.Tensor.Tensor CreateLargeInput(int seqLen, int hiddenSize)
+    {
+        var data = new float[seqLen * hiddenSize];
+
+        for (var i = 0; i < data.Length; i++)
+        {
+            data[i] = ((i * 13 + 5) % 9 - 4) * 1.0f;
+        }
+
+        return new WebExpress.LLM.Tensor.Tensor([seqLen, hiddenSize], data);
+    }
+
     private static WebExpress.LLM.Tensor.Tensor CreateWeight(int rows, int cols)
     {
         var data = new float[rows * cols];

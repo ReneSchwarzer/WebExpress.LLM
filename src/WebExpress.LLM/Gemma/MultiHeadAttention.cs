@@ -21,6 +21,7 @@ public sealed class MultiHeadAttention
     private readonly bool _isFullAttention;
     private readonly int _slidingWindowSize;
     private readonly RotaryEmbedding _rope;
+    private readonly float _attentionLogitsSoftcap;
 
     /// <summary>
     /// Initializes a new MultiHeadAttention layer.
@@ -31,13 +32,19 @@ public sealed class MultiHeadAttention
     /// <param name="isFullAttention">Whether this layer uses full attention (true) or sliding window (false).</param>
     /// <param name="slidingWindowSize">The sliding window size for local attention.</param>
     /// <param name="rope">The rotary position embedding to apply to queries and keys.</param>
+    /// <param name="attentionLogitsSoftcap">
+    /// Optional soft-cap applied to pre-softmax attention scores via
+    /// <c>tanh(score / cap) * cap</c>. A value of 0 (the default) disables the
+    /// soft cap. Used by Gemma-2 and some Gemma-4 variants to stabilise training.
+    /// </param>
     public MultiHeadAttention(
         int numQueryHeads,
         int numKvHeads,
         int headDim,
         bool isFullAttention,
         int slidingWindowSize,
-        RotaryEmbedding rope)
+        RotaryEmbedding rope,
+        float attentionLogitsSoftcap = 0f)
     {
         _numQueryHeads = numQueryHeads;
         _numKvHeads = numKvHeads;
@@ -45,6 +52,7 @@ public sealed class MultiHeadAttention
         _isFullAttention = isFullAttention;
         _slidingWindowSize = slidingWindowSize;
         _rope = rope ?? throw new ArgumentNullException(nameof(rope));
+        _attentionLogitsSoftcap = attentionLogitsSoftcap;
     }
 
     /// <summary>
@@ -57,6 +65,9 @@ public sealed class MultiHeadAttention
     /// <param name="oProjWeight">Output projection weight [hiddenSize, numQueryHeads * headDim].</param>
     /// <param name="kvCache">Optional KV cache for autoregressive generation.</param>
     /// <param name="layerIndex">The layer index (used for KV cache keying).</param>
+    /// <param name="qNormWeight">Optional per-head query RMSNorm weight of shape [qHeadDim], applied before RoPE.</param>
+    /// <param name="kNormWeight">Optional per-head key RMSNorm weight of shape [kHeadDim], applied before RoPE.</param>
+    /// <param name="rmsNormEpsilon">Epsilon used for the optional q/k RMSNorm operations.</param>
     /// <returns>The attention output of shape [seqLen, hiddenSize].</returns>
     public Tensor.Tensor Forward(
         Tensor.Tensor input,
@@ -65,7 +76,10 @@ public sealed class MultiHeadAttention
         Tensor.Tensor vProjWeight,
         Tensor.Tensor oProjWeight,
         KvCache kvCache = null,
-        int layerIndex = 0)
+        int layerIndex = 0,
+        Tensor.Tensor qNormWeight = null,
+        Tensor.Tensor kNormWeight = null,
+        float rmsNormEpsilon = 1e-6f)
     {
         var seqLen = input.Shape[0];
         var hiddenSize = input.Shape[1];
@@ -131,6 +145,18 @@ public sealed class MultiHeadAttention
         var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, kHeadDim);
         var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, vHeadDim);
 
+        // Per-head RMSNorm on Q and K (Gemma-4 uses q_norm/k_norm before RoPE).
+        // RmsNorm normalises over the last dimension, which is the head dimension here.
+        if (qNormWeight != null)
+        {
+            Q = TensorOperations.RmsNorm(Q, qNormWeight, rmsNormEpsilon);
+        }
+
+        if (kNormWeight != null)
+        {
+            K = TensorOperations.RmsNorm(K, kNormWeight, rmsNormEpsilon);
+        }
+
         // Apply RoPE to Q and K
         var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
         Q = _rope.Apply(Q, startPosition);
@@ -157,7 +183,9 @@ public sealed class MultiHeadAttention
         // When Q has a larger head dimension than K (asymmetric head dims),
         // the dot product uses only the first kHeadDim dimensions of Q.
         var kvSeqLen = K.Shape[1];
-        var scores = ComputeAttentionScores(Q, K, _numQueryHeads, seqLen, kvSeqLen, qHeadDim, kHeadDim);
+        var scores = ComputeAttentionScores(
+            Q, K, _numQueryHeads, seqLen, kvSeqLen, qHeadDim, kHeadDim,
+            _attentionLogitsSoftcap);
 
         // Apply attention mask
         ApplyMask(scores, seqLen, kvSeqLen, startPosition);
@@ -314,16 +342,19 @@ public sealed class MultiHeadAttention
     }
 
     /// <summary>
-    /// Computes Q @ K^T / sqrt(dotDim) for each head independently.
-    /// When Q and K have different per-head dimensions, the dot product
-    /// is computed over the smaller dimension (kHeadDim).
+    /// Computes Q @ K^T / sqrt(dotDim) for each head independently, optionally
+    /// applying an attention-logits soft cap (<c>tanh(score / cap) * cap</c>)
+    /// before the softmax. When Q and K have different per-head dimensions,
+    /// the dot product is computed over the smaller dimension (kHeadDim).
     /// </summary>
     private static Tensor.Tensor ComputeAttentionScores(
-        Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int qHeadDim, int kHeadDim)
+        Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int qHeadDim, int kHeadDim,
+        float softcap)
     {
         var dotDim = Math.Min(qHeadDim, kHeadDim);
         var scores = new float[numHeads * queryLen * kvLen];
         var scale = 1.0f / MathF.Sqrt(dotDim);
+        var applySoftcap = softcap > 0f;
 
         Parallel.For(0, numHeads, h =>
         //for (var h = 0; h < numHeads; h++)
@@ -343,7 +374,17 @@ public sealed class MultiHeadAttention
                         dot += Q.Data[qOffset + i * qHeadDim + d] * K.Data[kOffset + j * kHeadDim + d];
                     }
 
-                    scores[sOffset + i * kvLen + j] = dot * scale;
+                    var score = dot * scale;
+
+                    if (applySoftcap)
+                    {
+                        // tanh bounds the score magnitude to ±softcap; applied
+                        // pre-mask so masked entries (−∞) pass through unchanged
+                        // after the caller overwrites them.
+                        score = MathF.Tanh(score / softcap) * softcap;
+                    }
+
+                    scores[sOffset + i * kvLen + j] = score;
                 }
             }
         });

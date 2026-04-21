@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace WebExpress.LLM.Tokenization;
 
@@ -16,9 +15,8 @@ namespace WebExpress.LLM.Tokenization;
 /// <list type="bullet">
 ///   <item>Model loading from <c>tokenizer.json</c> (vocabulary and BPE merge rules)</item>
 ///   <item>Configuration loading from <c>tokenizer_config.json</c> (special tokens, flags)</item>
-///   <item>NFKC normalization of input text</item>
-///   <item>Pre-tokenization using whitespace and punctuation splitting</item>
-///   <item>BPE-based subword encoding using iterative pair merging</item>
+///   <item>Normalization matching the tokenizer.json pipeline: NFKC followed by Replace(" ", "▁")</item>
+///   <item>BPE-based subword encoding using iterative pair merging over the full normalized string</item>
 ///   <item>Special token handling (BOS, EOS, UNK, PAD) with configurable token names</item>
 ///   <item>Decoding with SentencePiece whitespace convention (▁ prefix)</item>
 /// </list>
@@ -38,6 +36,7 @@ public sealed class GemmaTokenizer : ITokenizer
     private readonly int _eosTokenId;
     private readonly bool _addBosToken;
     private readonly bool _addEosToken;
+    private readonly string[] _specialTokens;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GemmaTokenizer"/> class with the specified
@@ -53,6 +52,13 @@ public sealed class GemmaTokenizer : ITokenizer
     /// <param name="eosTokenId">The ID for the end-of-sequence token. Default is 1.</param>
     /// <param name="addBosToken">Whether to prepend a BOS token during encoding. Default is true.</param>
     /// <param name="addEosToken">Whether to append an EOS token during encoding. Default is false.</param>
+    /// <param name="specialTokens">
+    /// Optional list of special / added tokens that must be matched as whole atoms before
+    /// BPE runs (e.g. <c>&lt;bos&gt;</c>, <c>&lt;|turn&gt;</c>). When null, the set is
+    /// auto-derived from the vocabulary: any entry of length &gt; 1 that starts with <c>&lt;</c>
+    /// and ends with <c>&gt;</c> is treated as a special token. Every special token must
+    /// exist in <paramref name="vocabulary"/>.
+    /// </param>
     public GemmaTokenizer(
         IReadOnlyDictionary<string, int> vocabulary,
         IReadOnlyList<(string Left, string Right)> merges,
@@ -60,7 +66,8 @@ public sealed class GemmaTokenizer : ITokenizer
         int bosTokenId = 2,
         int eosTokenId = 1,
         bool addBosToken = true,
-        bool addEosToken = false)
+        bool addEosToken = false,
+        IReadOnlyCollection<string> specialTokens = null)
     {
         ArgumentNullException.ThrowIfNull(vocabulary);
         ArgumentNullException.ThrowIfNull(merges);
@@ -90,12 +97,45 @@ public sealed class GemmaTokenizer : ITokenizer
         _eosTokenId = eosTokenId;
         _addBosToken = addBosToken;
         _addEosToken = addEosToken;
+
+        // Pre-compute the special-token list, sorted by length (descending) so the
+        // longest-match wins during the pre-split scan (e.g. "<start_of_turn>"
+        // must win over "<start>" when both are present).
+        var specials = new List<string>();
+
+        if (specialTokens != null)
+        {
+            foreach (var s in specialTokens)
+            {
+                if (!string.IsNullOrEmpty(s) && _pieceToId.ContainsKey(s))
+                {
+                    specials.Add(s);
+                }
+            }
+        }
+        else
+        {
+            foreach (var key in _pieceToId.Keys)
+            {
+                if (key.Length > 1 && key[0] == '<' && key[^1] == '>')
+                {
+                    specials.Add(key);
+                }
+            }
+        }
+
+        specials.Sort((a, b) => b.Length.CompareTo(a.Length));
+        _specialTokens = specials.ToArray();
     }
 
     /// <summary>
     /// Encodes the specified text into a sequence of integer token identifiers using BPE.
-    /// The input is first normalized (NFKC), then pre-tokenized, then each word is encoded
-    /// using BPE merge rules.
+    /// The input is first scanned for special / added tokens (e.g. <c>&lt;bos&gt;</c>,
+    /// <c>&lt;|turn&gt;</c>) which are emitted as atomic IDs. Any remaining runs of
+    /// ordinary text are normalized (NFKC followed by " " → "▁", matching the
+    /// tokenizer.json normalizer) and handed to BPE. The pre_tokenizer declared in
+    /// tokenizer.json splits on " " after the normalizer has already consumed every
+    /// regular space, so it is a no-op in practice and is omitted.
     /// </summary>
     /// <param name="text">The text to encode. Cannot be null.</param>
     /// <returns>
@@ -106,30 +146,6 @@ public sealed class GemmaTokenizer : ITokenizer
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        if (string.IsNullOrEmpty(text))
-        {
-            var empty = new List<int>();
-
-            if (_addBosToken)
-            {
-                empty.Add(_bosTokenId);
-            }
-
-            if (_addEosToken)
-            {
-                empty.Add(_eosTokenId);
-            }
-
-            return empty;
-        }
-
-        // Step 1: Normalize (NFKC)
-        var normalized = Normalize(text);
-
-        // Step 2: Pre-tokenize (split into words)
-        var words = PreTokenize(normalized);
-
-        // Step 3: Encode via BPE
         var tokenIds = new List<int>();
 
         if (_addBosToken)
@@ -137,13 +153,36 @@ public sealed class GemmaTokenizer : ITokenizer
             tokenIds.Add(_bosTokenId);
         }
 
-        foreach (var word in words)
+        if (!string.IsNullOrEmpty(text))
         {
-            var wordTokens = ApplyBpe(word);
+            var buffer = new StringBuilder();
+            var i = 0;
 
-            foreach (var token in wordTokens)
+            while (i < text.Length)
             {
-                tokenIds.Add(_pieceToId.TryGetValue(token, out var id) ? id : _unknownTokenId);
+                var matched = MatchSpecialToken(text, i);
+
+                if (matched != null)
+                {
+                    if (buffer.Length > 0)
+                    {
+                        EncodeSegment(buffer.ToString(), tokenIds);
+                        buffer.Clear();
+                    }
+
+                    tokenIds.Add(_pieceToId[matched]);
+                    i += matched.Length;
+                }
+                else
+                {
+                    buffer.Append(text[i]);
+                    i++;
+                }
+            }
+
+            if (buffer.Length > 0)
+            {
+                EncodeSegment(buffer.ToString(), tokenIds);
             }
         }
 
@@ -153,6 +192,40 @@ public sealed class GemmaTokenizer : ITokenizer
         }
 
         return tokenIds;
+    }
+
+    /// <summary>
+    /// Returns the longest special token that matches at <paramref name="start"/> in
+    /// <paramref name="text"/>, or <c>null</c> if none does. The candidate list is
+    /// pre-sorted by descending length, so the first hit is the longest.
+    /// </summary>
+    private string MatchSpecialToken(string text, int start)
+    {
+        foreach (var token in _specialTokens)
+        {
+            if (start + token.Length <= text.Length &&
+                string.CompareOrdinal(text, start, token, 0, token.Length) == 0)
+            {
+                return token;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Normalizes a non-special text segment and appends the BPE-encoded tokens to
+    /// <paramref name="tokenIds"/>.
+    /// </summary>
+    private void EncodeSegment(string segment, List<int> tokenIds)
+    {
+        var normalized = Normalize(segment);
+        var pieces = ApplyBpe(normalized);
+
+        foreach (var piece in pieces)
+        {
+            tokenIds.Add(_pieceToId.TryGetValue(piece, out var id) ? id : _unknownTokenId);
+        }
     }
 
     /// <summary>
@@ -297,6 +370,33 @@ public sealed class GemmaTokenizer : ITokenizer
             }
         }
 
+        // Read the optional added_tokens array. HuggingFace stores control /
+        // special tokens here (e.g. <bos>, <eos>, <|turn>, <start_of_turn>)
+        // together with their IDs; they must be matched atomically before BPE
+        // runs, otherwise a substring like "<|turn>" would be shattered into
+        // per-character BPE units.
+        List<string> addedTokens = null;
+
+        if (root.TryGetProperty("added_tokens", out var addedElement) &&
+            addedElement.ValueKind == JsonValueKind.Array)
+        {
+            addedTokens = [];
+
+            foreach (var entry in addedElement.EnumerateArray())
+            {
+                if (entry.TryGetProperty("content", out var contentElement) &&
+                    contentElement.ValueKind == JsonValueKind.String)
+                {
+                    var content = contentElement.GetString();
+
+                    if (!string.IsNullOrEmpty(content) && vocab.ContainsKey(content))
+                    {
+                        addedTokens.Add(content);
+                    }
+                }
+            }
+        }
+
         // Resolve special token IDs from vocabulary.
         // Gemma uses <bos>/<eos> rather than <s>/</s>.
         var unkId = ResolveTokenId(vocab, config?.UnkToken, "<unk>", 0);
@@ -306,7 +406,7 @@ public sealed class GemmaTokenizer : ITokenizer
         var addBos = config?.AddBosToken ?? true;
         var addEos = config?.AddEosToken ?? false;
 
-        return new GemmaTokenizer(vocab, mergePairs, unkId, bosId, eosId, addBos, addEos);
+        return new GemmaTokenizer(vocab, mergePairs, unkId, bosId, eosId, addBos, addEos, addedTokens);
     }
 
     /// <summary>
@@ -348,56 +448,16 @@ public sealed class GemmaTokenizer : ITokenizer
     }
 
     /// <summary>
-    /// Applies NFKC normalization to the input text.
-    /// This is the standard normalization used by SentencePiece and Gemma tokenizers.
+    /// Applies the normalization pipeline declared in Gemma's tokenizer.json: NFKC
+    /// Unicode normalization followed by Replace(" ", "▁"). The vocabulary stores
+    /// word-initial tokens with a leading ▁, so "Hallo" and " Hallo" must remain
+    /// distinguishable after normalization.
     /// </summary>
     /// <param name="text">The text to normalize.</param>
-    /// <returns>The NFKC-normalized text.</returns>
+    /// <returns>The normalized text with regular spaces replaced by ▁.</returns>
     internal static string Normalize(string text)
     {
-        return text.Normalize(NormalizationForm.FormKC);
-    }
-
-    /// <summary>
-    /// Splits input text into words following SentencePiece conventions.
-    /// Every word is prefixed with the ▁ (U+2581) character to represent a word boundary,
-    /// including the very first word (matching standard SentencePiece behavior).
-    /// </summary>
-    internal static List<string> PreTokenize(string text)
-    {
-        var words = new List<string>();
-        var current = new StringBuilder();
-
-        for (var i = 0; i < text.Length; i++)
-        {
-            var ch = text[i];
-
-            if (char.IsWhiteSpace(ch))
-            {
-                if (current.Length > 0)
-                {
-                    words.Add(current.ToString());
-                    current.Clear();
-                }
-            }
-            else
-            {
-                if (current.Length == 0)
-                {
-                    // Every word starts with ▁ (including the first word)
-                    current.Append(SpaceSymbol);
-                }
-
-                current.Append(ch);
-            }
-        }
-
-        if (current.Length > 0)
-        {
-            words.Add(current.ToString());
-        }
-
-        return words;
+        return text.Normalize(NormalizationForm.FormKC).Replace(' ', SpaceSymbol);
     }
 
     /// <summary>
@@ -421,6 +481,12 @@ public sealed class GemmaTokenizer : ITokenizer
 
     /// <summary>
     /// Applies BPE merge operations to a single word, producing a list of subword tokens.
+    /// The initial split uses a greedy longest-prefix match against the full vocabulary
+    /// (not character-by-character). This matches how Gemma's reference tokenizer resolves
+    /// multi-character atomic vocab entries such as <c>Hallo</c>, <c>▁Hallo</c>, <c>\n</c>,
+    /// or control markers like <c>&lt;|turn&gt;</c>. Any position where no vocab prefix
+    /// matches falls back to a single-character symbol, which then either participates in
+    /// a merge or becomes an UNK during the final piece-to-id lookup.
     /// </summary>
     private List<string> ApplyBpe(string word)
     {
@@ -429,18 +495,39 @@ public sealed class GemmaTokenizer : ITokenizer
             return [];
         }
 
-        // Check if the entire word is in vocabulary
+        // Fast path: whole word is an atomic vocab entry.
         if (_pieceToId.ContainsKey(word))
         {
             return [word];
         }
 
-        // Start with individual characters as the initial token sequence
-        var symbols = new List<string>(word.Length);
+        // Greedy longest-prefix segmentation against the vocabulary.
+        var symbols = new List<string>();
+        var pos = 0;
 
-        foreach (var ch in word)
+        while (pos < word.Length)
         {
-            symbols.Add(ch.ToString());
+            var bestLen = 0;
+
+            for (var len = word.Length - pos; len > 0; len--)
+            {
+                if (_pieceToId.ContainsKey(word.Substring(pos, len)))
+                {
+                    bestLen = len;
+                    break;
+                }
+            }
+
+            if (bestLen > 0)
+            {
+                symbols.Add(word.Substring(pos, bestLen));
+                pos += bestLen;
+            }
+            else
+            {
+                symbols.Add(word[pos].ToString());
+                pos++;
+            }
         }
 
         while (symbols.Count > 1)

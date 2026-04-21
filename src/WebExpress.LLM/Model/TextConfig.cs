@@ -112,6 +112,14 @@ public sealed class TextConfig
     public float FinalLogitSoftcapping { get; init; }
 
     /// <summary>
+    /// Gets the soft-capping value applied to attention logits before the softmax.
+    /// A value of 0 (the default) disables the soft cap. Present in some Gemma
+    /// variants (e.g. Gemma-2); absent in 26B_A4B.
+    /// </summary>
+    [JsonPropertyName("attn_logit_softcapping")]
+    public float AttentionLogitsSoftcapping { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether attention bias terms are used.
     /// </summary>
     [JsonPropertyName("attention_bias")]
@@ -179,6 +187,30 @@ public sealed class TextConfig
     public bool EnableMoeBlock { get; init; }
 
     /// <summary>
+    /// Gets the total number of expert networks per MoE block.
+    /// </summary>
+    [JsonPropertyName("num_experts")]
+    public int NumberOfExperts { get; init; }
+
+    /// <summary>
+    /// Gets the number of experts selected per token by the MoE router (top-k).
+    /// </summary>
+    [JsonPropertyName("top_k_experts")]
+    public int TopKExperts { get; init; }
+
+    /// <summary>
+    /// Gets the per-expert feed-forward intermediate size used in MoE blocks.
+    /// </summary>
+    [JsonPropertyName("moe_intermediate_size")]
+    public int MoeIntermediateSize { get; init; }
+
+    /// <summary>
+    /// Gets the number of key-value attention heads used in full (global) attention layers.
+    /// </summary>
+    [JsonPropertyName("num_global_key_value_heads")]
+    public int NumberOfGlobalKeyValueHeads { get; init; }
+
+    /// <summary>
     /// Gets the list of attention layer types (e.g. "sliding_attention", "full_attention").
     /// </summary>
     [JsonPropertyName("layer_types")]
@@ -189,4 +221,12 @@ public sealed class TextConfig
     /// </summary>
     [JsonPropertyName("num_kv_shared_layers")]
     public int NumberOfKvSharedLayers { get; init; }
+
+    /// <summary>
+    /// Gets the policy for using bidirectional attention. Documented for
+    /// completeness of the config surface — relevant to vision inputs only
+    /// and unused by the text-only inference path.
+    /// </summary>
+    [JsonPropertyName("use_bidirectional_attention")]
+    public string UseBidirectionalAttention { get; init; } = string.Empty;
 }

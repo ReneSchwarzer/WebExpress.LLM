@@ -77,17 +77,22 @@ Weights are loaded via the `ISafeTensorLoader` interface, which supports:
 - **Sharded**: `ShardedSafeTensorLoader` using a `model.safetensors.index.json` weight map.
 
 ### 3. Transformer Layer Implementation
-Each of the 35 layers (as defined in `Gemma4Model.TransformerLayer`) performs:
+Each layer (as defined in `Gemma4Model.TransformerLayer`) performs:
 
 1.  **Input RMS Normalization**: Normalizes inputs using the `input_layernorm` weights.
 2.  **Multi-Head Attention**:
     - Supports both **Sliding Window Attention** (default) and **Full Attention** (global layers).
     - Implements **GQA** (Grouped Query Attention) based on head configuration.
+    - Uses a distinct KV-head count for full-attention layers (`num_global_key_value_heads`).
+    - Optional per-head **QK-Norm** (`self_attn.q_norm`, `self_attn.k_norm`) before RoPE.
+    - Optional **attention-logits soft cap** (`attn_logit_softcapping`) applied pre-softmax.
     - Handles `attention_key_equals_value` for specific model variants.
-3.  **Residual Connection**: Adds the attention output back to the input.
-4.  **Post-Attention Normalization**: Second RMS norm before the MLP.
-5.  **Gated Feed-Forward Network**: Implements `gate_proj`, `up_proj`, and `down_proj` with gated activation.
-6.  **Final Residual Connection**: Produces the layer output.
+3.  **Skip-Scaled Residual Connection**: Adds the attention output (multiplied by the per-layer `layer_scalar`) to the input.
+4.  **Post-Attention Normalization**: Second RMS norm before the feed-forward stage.
+5.  **Feed-Forward Stage**:
+    - **MoE variants** (`enable_moe_block=true`, e.g. 26B_A4B): a Mixture-of-Experts branch and a dense shared branch (mlp2) run in parallel, each with its own pre- and post-RMSNorm; the outputs are summed and a combined post-FFW RMSNorm is applied before the residual.
+    - **Non-MoE variants**: a single gated feed-forward network (`gate_proj`/`up_proj`/`down_proj`).
+6.  **Skip-Scaled Final Residual Connection**: Adds the feed-forward output (multiplied by `layer_scalar`) back to the residual.
 
 ### 4. Rotary Positional Embeddings (RoPE)
 Implemented in the `RotaryEmbedding` class, supporting:
@@ -98,12 +103,28 @@ Implemented in the `RotaryEmbedding` class, supporting:
 ### 5. Efficient Generation (KV Cache)
 The `KvCache` class manages the storage of key and value tensors across generation steps, drastically reducing the computational cost for long sequences by avoiding redundant processing of previous tokens.
 
+## Deferred Features (Checked at Load Time)
+
+`Gemma4Model.Forward` refuses to run a checkpoint that requests any of the
+following — guarded to prevent silent mis-inference:
+
+- `hidden_size_per_layer_input > 0` — per-layer input (PLE) projections. Not
+  used by 26B_A4B. Reference implementation:
+  `gemma/gm/nn/gemma4/layers.py` (`PerLayerInputProjection`).
+- `num_kv_shared_layers > 0` — KV-cache sharing where trailing layers reuse
+  K/V from an earlier layer. Not used by 26B_A4B.
+- `use_double_wide_mlp == true` — double-wide dense MLP variant.
+
+Each guard throws `NotSupportedException` on model invocation rather than
+returning wrong tokens.
+
 ## Implementation Roadmap (Next Steps)
 
 1.  **Phase 1**: SIMD optimization for `TensorOperations` to improve CPU performance.
 2.  **Phase 2**: Optional GPU acceleration via Compute Shaders or DirectCompute.
 3.  **Phase 3**: Quantization support (Q4_K, Q8_0) to reduce memory footprint.
 4.  **Phase 4**: Multi-modal support (Vision/Audio) as per Gemma-4 specifications.
+5.  **Phase 5**: Lift the deferred-feature guards listed above (PLE, KV-cache sharing, double-wide MLP).
 
 ## Testing Strategy
 

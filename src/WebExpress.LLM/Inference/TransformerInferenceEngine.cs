@@ -158,6 +158,8 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             {
                 contextTokens.RemoveAt(0);
             }
+
+            //System.Console.WriteLine($"Generating {maxNewTokens} tokens with context [{string.Join(",", contextTokens)}]");
         }
     }
 

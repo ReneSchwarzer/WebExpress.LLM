@@ -117,6 +117,10 @@ public sealed class ChatSession
         var prompt = FormatPrompt();
         var promptTokens = _tokenizer.Encode(prompt);
 
+        yield return "\n";
+        yield return $"chat template: '{prompt}'\n";
+        yield return $"prompt tokens: '[{string.Join(",", promptTokens)}]'\n";
+
         var responseBuilder = new StringBuilder();
         var responseTokens = new List<int>();
 

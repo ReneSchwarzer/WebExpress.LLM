@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Xml.Linq;
 
@@ -113,7 +114,7 @@ public sealed class ConfigurationLoader
     /// </returns>
     private static int ParseInt(string value, int defaultValue)
     {
-        return string.IsNullOrWhiteSpace(value) ? defaultValue : int.Parse(value);
+        return string.IsNullOrWhiteSpace(value) ? defaultValue : int.Parse(value, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -133,7 +134,7 @@ public sealed class ConfigurationLoader
     /// </returns>
     private static float ParseFloat(string value, float defaultValue)
     {
-        return string.IsNullOrWhiteSpace(value) ? defaultValue : float.Parse(value);
+        return string.IsNullOrWhiteSpace(value) ? defaultValue : float.Parse(value, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -173,7 +174,7 @@ public sealed class ConfigurationLoader
     /// </returns>
     private static int? ParseNullableInt(string value)
     {
-        return string.IsNullOrWhiteSpace(value) ? null : int.Parse(value);
+        return string.IsNullOrWhiteSpace(value) ? null : int.Parse(value, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -189,6 +190,6 @@ public sealed class ConfigurationLoader
     /// </returns>
     private static float? ParseNullableFloat(string value)
     {
-        return string.IsNullOrWhiteSpace(value) ? null : float.Parse(value);
+        return string.IsNullOrWhiteSpace(value) ? null : float.Parse(value, CultureInfo.InvariantCulture);
     }
 }
