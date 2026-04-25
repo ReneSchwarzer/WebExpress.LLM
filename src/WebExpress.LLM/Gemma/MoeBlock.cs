@@ -7,15 +7,24 @@ namespace WebExpress.LLM.Gemma;
 /// Implements the Mixture-of-Experts (MoE) sublayer used in Gemma-4 MoE variants.
 /// </summary>
 /// <remarks>
-/// For every token the router selects the top-k experts out of a pool of N experts.
-/// The selected experts process the token through a SwiGLU-style feed-forward network
-/// whose gate and up projections are fused into a single weight tensor. The expert
-/// outputs are combined via a softmax over the top-k router logits, optionally scaled
-/// by per-expert router scales.
+/// Router pipeline (mirrors <c>gemma/gm/nn/gemma4/_moe.MoERagged.__call__</c>):
+/// <code>
+///   router_input = rms_norm(x, with_scale=False)        // scale-less RMSNorm
+///   router_input = router_input * rsqrt(features) * router_scale  // router_scale: [features]
+///   logits       = router_input @ router_proj^T          // [seqLen, numExperts]
+///   probs        = softmax(logits, axis=-1)              // full distribution
+///   choices      = topk(probs, k)
+///   weights[k]   = probs[choice_k] / sum_{i in topK} probs[choice_i]
+/// </code>
+/// For each chosen expert, the token is passed through a SwiGLU-style feed-forward
+/// network. The output is scaled by the routing weight and (optionally) by a
+/// learned <c>per_expert_scale</c>; per-expert scaling is applied to the routing
+/// weight, which is mathematically equivalent to scaling the expert output before
+/// the weighted sum.
 ///
 /// Weight layout (HuggingFace convention, [out, in] per-expert, stacked along axis 0):
 ///   router.proj.weight            : [numExperts, hiddenSize]
-///   router.scale                  : scalar (1-element tensor), optional
+///   router.scale                  : [hiddenSize], optional (per-feature router scale)
 ///   router.per_expert_scale       : [numExperts], optional
 ///   experts.gate_up_proj          : [numExperts, 2 * moeIntermediateSize, hiddenSize]
 ///   experts.down_proj             : [numExperts, hiddenSize, moeIntermediateSize]
@@ -27,11 +36,12 @@ public static class MoeBlock
     /// </summary>
     /// <param name="hidden">Input activations of shape [seqLen, hiddenSize].</param>
     /// <param name="routerProjWeight">Router projection of shape [numExperts, hiddenSize].</param>
-    /// <param name="routerScale">Optional scalar multiplier applied to router logits.</param>
-    /// <param name="perExpertScale">Optional per-expert weight applied after softmax, shape [numExperts].</param>
+    /// <param name="routerScale">Optional per-feature router scale of shape [hiddenSize], applied after a scale-less RMSNorm and the <c>1/sqrt(features)</c> factor.</param>
+    /// <param name="perExpertScale">Optional per-expert weight, shape [numExperts]. Applied to the routing weight (equivalent to scaling the expert output).</param>
     /// <param name="expertsGateUpProj">Fused gate+up expert weights of shape [numExperts, 2*moeInter, hiddenSize].</param>
     /// <param name="expertsDownProj">Expert down-projection weights of shape [numExperts, hiddenSize, moeInter].</param>
     /// <param name="topK">The number of experts to activate per token.</param>
+    /// <param name="rmsNormEpsilon">Epsilon used by the scale-less router RMSNorm.</param>
     /// <returns>Output tensor of shape [seqLen, hiddenSize].</returns>
     public static Tensor.Tensor Forward(
         Tensor.Tensor hidden,
@@ -40,7 +50,8 @@ public static class MoeBlock
         Tensor.Tensor perExpertScale,
         Tensor.Tensor expertsGateUpProj,
         Tensor.Tensor expertsDownProj,
-        int topK)
+        int topK,
+        float rmsNormEpsilon = 1e-6f)
     {
         ArgumentNullException.ThrowIfNull(hidden);
         ArgumentNullException.ThrowIfNull(routerProjWeight);
@@ -85,33 +96,76 @@ public static class MoeBlock
                 $"topK must be in range [1, {numExperts}].");
         }
 
-        // Router logits: [seqLen, numExperts] = hidden @ router.proj.weight^T
-        var routerLogits = TensorOperations.MatMul(hidden, routerProjWeight.Transpose());
-
-        var scale = 1.0f;
-
-        if (routerScale != null && routerScale.Length > 0)
+        if (routerScale != null && routerScale.Length != hiddenSize)
         {
-            scale = routerScale[0];
+            throw new ArgumentException(
+                $"router.scale length {routerScale.Length} must match hidden size {hiddenSize}.",
+                nameof(routerScale));
         }
+
+        // Router input: scale-less RMSNorm, then (1/sqrt(features)) * router_scale.
+        var routerInput = TensorOperations.RmsNorm(hidden, weight: null, rmsNormEpsilon);
+        var rsqrtFeatures = 1.0f / MathF.Sqrt(hiddenSize);
+
+        if (routerScale != null)
+        {
+            for (var t = 0; t < seqLen; t++)
+            {
+                for (var f = 0; f < hiddenSize; f++)
+                {
+                    routerInput[t, f] = routerInput[t, f] * rsqrtFeatures * routerScale[f];
+                }
+            }
+        }
+        else
+        {
+            // No router_scale weight: just apply the rsqrt(features) factor.
+            for (var i = 0; i < routerInput.Length; i++)
+            {
+                routerInput.Data[i] *= rsqrtFeatures;
+            }
+        }
+
+        // Router logits: [seqLen, numExperts] = routerInput @ router.proj.weight^T
+        var routerLogits = TensorOperations.MatMul(routerInput, routerProjWeight.Transpose());
 
         var output = new Tensor.Tensor(seqLen, hiddenSize);
 
-        // Scratch buffers reused across tokens and experts
+        // Scratch buffers reused across tokens
         var tokenLogits = new float[numExperts];
+        var tokenProbs = new float[numExperts];
         var topIdx = new int[topK];
         var topVals = new float[topK];
 
         for (var t = 0; t < seqLen; t++)
         {
-            // Scale logits for this token
             for (var e = 0; e < numExperts; e++)
             {
-                tokenLogits[e] = routerLogits[t, e] * scale;
+                tokenLogits[e] = routerLogits[t, e];
             }
 
-            SelectTopK(tokenLogits, topIdx, topVals);
-            SoftmaxInPlace(topVals);
+            // Full softmax over all experts (router_probs in the reference).
+            FullSoftmax(tokenLogits, tokenProbs);
+
+            // Top-k selection over the probabilities (rank-equivalent to top-k of logits).
+            SelectTopK(tokenProbs, topIdx, topVals);
+
+            // Renormalize: weights[k] = probs[choice_k] / sum_{i in topK} probs[choice_i].
+            // If sum is zero (only possible for masked/padded tokens) keep zeros.
+            var sum = 0f;
+
+            for (var i = 0; i < topK; i++)
+            {
+                sum += topVals[i];
+            }
+
+            if (sum > 0f)
+            {
+                for (var i = 0; i < topK; i++)
+                {
+                    topVals[i] /= sum;
+                }
+            }
 
             if (perExpertScale != null && perExpertScale.Length == numExperts)
             {
@@ -140,6 +194,38 @@ public static class MoeBlock
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Numerically stable softmax, written into <paramref name="probs"/>.
+    /// </summary>
+    private static void FullSoftmax(float[] logits, float[] probs)
+    {
+        var max = float.NegativeInfinity;
+
+        for (var i = 0; i < logits.Length; i++)
+        {
+            if (logits[i] > max)
+            {
+                max = logits[i];
+            }
+        }
+
+        var sum = 0f;
+
+        for (var i = 0; i < logits.Length; i++)
+        {
+            probs[i] = MathF.Exp(logits[i] - max);
+            sum += probs[i];
+        }
+
+        if (sum > 0f)
+        {
+            for (var i = 0; i < probs.Length; i++)
+            {
+                probs[i] /= sum;
+            }
+        }
     }
 
     /// <summary>
@@ -269,35 +355,4 @@ public static class MoeBlock
         }
     }
 
-    /// <summary>
-    /// Applies a numerically stable softmax in place over the given array.
-    /// </summary>
-    private static void SoftmaxInPlace(float[] values)
-    {
-        var max = float.NegativeInfinity;
-
-        for (var i = 0; i < values.Length; i++)
-        {
-            if (values[i] > max)
-            {
-                max = values[i];
-            }
-        }
-
-        var sum = 0f;
-
-        for (var i = 0; i < values.Length; i++)
-        {
-            values[i] = MathF.Exp(values[i] - max);
-            sum += values[i];
-        }
-
-        if (sum > 0f)
-        {
-            for (var i = 0; i < values.Length; i++)
-            {
-                values[i] /= sum;
-            }
-        }
-    }
 }

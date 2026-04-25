@@ -12,17 +12,17 @@ namespace WebExpress.LLM.Gemma;
 /// <remarks>
 /// The model consists of:
 /// 1. Token embedding lookup with scaling by sqrt(hidden_size)
-/// 2. N transformer layers, each with:
-///    - Input RMS normalization
-///    - Multi-head attention (sliding window or full) with optional QK-Norm
-///    - Residual connection (scaled by per-layer layer_scalar)
-///    - Post-attention RMS normalization
-///    - Feed-forward stage: when enable_moe_block is true, a Mixture-of-Experts branch
-///      runs in parallel to a dense shared branch (mlp2); each has its own
-///      pre/post RMS norms, the outputs are summed, and a combined post-FFW norm
-///      is applied before the residual addition. Without MoE, a single gated
-///      feed-forward network is used.
-///    - Residual connection (scaled by per-layer layer_scalar)
+/// 2. N transformer layers, each with (matching Gemma-4 reference Block.__call__):
+///    - Pre-attention RMS norm (input_layernorm)
+///    - Multi-head attention (sliding window or full) with QK-Norm, value_norm
+///    - Post-attention RMS norm applied to the attention output
+///    - First residual: attn_output + input
+///    - Feed-forward stage on the residual:
+///        * Dense path: pre_feedforward_layernorm → gated MLP → post_feedforward_layernorm
+///        * MoE path: pre/post norms around an MoE branch and a parallel dense shared
+///          (mlp2) branch, summed and passed through a combined post-FFW norm.
+///    - Second residual: ffw_output + attn_residual
+///    - Multiplied once by the per-layer skip_scale (layer_scalar)
 /// 3. Final RMS normalization
 /// 4. Linear projection to vocabulary logits (tied with the embedding matrix when configured)
 /// 5. Optional final logit soft-capping via tanh
@@ -162,15 +162,19 @@ public sealed class Gemma4Model
     /// Processes a single transformer layer.
     /// </summary>
     /// <remarks>
-    /// Performs all operations for a single transformer layer as used in Gemma 4.
-    /// Steps:
-    /// - Applies RMS normalization to the input hidden state.
-    /// - Computes multi-head attention (with rotary embeddings, attention type, and key-value sharing as configured).
-    /// - Adds the attention output via a residual connection.
-    /// - Applies RMS normalization after the attention block.
-    /// - Runs the feed-forward sublayer (e.g., gated or MoE variant as configured).
-    /// - Adds the feed-forward output via a second residual connection.
-    /// Layer-specific weights and attention settings are loaded dynamically for each layer and configuration.
+    /// Mirrors the Gemma-4 reference block (<c>gemma/gm/nn/gemma4/_modules.Block</c>):
+    /// <code>
+    ///   x_norm        = pre_attention_norm(x)
+    ///   attn          = attention(x_norm)
+    ///   attn          = post_attention_norm(attn)        // norm on attn output
+    ///   attn_residual = attn + x                          // first residual
+    ///   ffw           = dense_or_moe_branch(attn_residual)
+    ///   out           = ffw + attn_residual               // second residual
+    ///   out           = out * skip_scale                  // single per-layer scale
+    /// </code>
+    /// The dense branch is <c>pre_ffw_norm → mlp → post_ffw_norm</c>; the MoE
+    /// branch additionally adds a parallel dense shared (mlp2) branch and
+    /// applies a final combined post-FFW norm. See <see cref="MoeAndSharedBranch"/>.
     /// </remarks>
     /// <param name="hidden">The input hidden state tensor for this layer.</param>
     /// <param name="layerIndex">The index of the transformer layer (0-based).</param>
@@ -214,16 +218,15 @@ public sealed class Gemma4Model
         var partialFactor = ropeEntry?.PartialRotaryFactor ?? 1.0f;
         var rope = new RotaryEmbedding(theta, partialFactor);
 
-        // Per-layer skip scale ("layer_scalar" in the checkpoint). Gates the
-        // residual branches so a freshly-initialised layer contributes near-zero
-        // and fine-tuning can grow its influence smoothly. Optional: if the
-        // tensor is absent we fall back to 1.0 and behave like a plain residual.
+        // Per-layer skip scale ("layer_scalar" in the checkpoint, "skip_scale"
+        // in the reference). Multiplied once at the end of the block. Optional:
+        // if the tensor is absent we fall back to 1.0.
         var layerScalarTensor = _loader.TryLoadTensor($"{prefix}.layer_scalar");
         var skipScale = layerScalarTensor != null && layerScalarTensor.Length > 0
             ? layerScalarTensor[0]
             : 1.0f;
 
-        // 1. Input RMS normalization
+        // 1. Pre-attention RMS norm
         var inputNormWeight = _loader.LoadTensor($"{prefix}.input_layernorm.weight");
         var normalized = TensorOperations.RmsNorm(hidden, inputNormWeight, rmsEps);
 
@@ -250,52 +253,78 @@ public sealed class Gemma4Model
             numQueryHeads, effectiveKvHeads, effectiveHeadDim,
             isFullAttention, slidingWindow, rope, attnSoftcap);
 
-        var attended = attention.Forward(
+        var attnOutput = attention.Forward(
             normalized, qWeight, kWeight, vWeight, oWeight,
             _kvCache, layerIndex,
             qNormWeight: qNormWeight,
             kNormWeight: kNormWeight,
             rmsNormEpsilon: rmsEps);
 
-        // 3. Residual connection (skip-scaled)
-        var residual1 = hidden + attended * skipScale;
+        // 3. Post-attention norm — applied to the attention output, not to the
+        //    residual stream (matches `Block.__call__` in the reference).
+        var postAttnNormWeight = _loader.LoadTensor($"{prefix}.post_attention_layernorm.weight");
+        attnOutput = TensorOperations.RmsNorm(attnOutput, postAttnNormWeight, rmsEps);
 
-        // 4. Post-attention RMS normalization
-        var postNormWeight = _loader.LoadTensor($"{prefix}.post_attention_layernorm.weight");
-        var normalized2 = TensorOperations.RmsNorm(residual1, postNormWeight, rmsEps);
+        // 4. First residual: attn_output + input
+        var attnResidual = attnOutput + hidden;
 
-        // 5. Feed-forward stage: MoE + dense shared (mlp2) when enabled,
-        //    otherwise the plain gated feed-forward network.
+        // 5. Feed-forward stage on attnResidual.
         var enableMoe = _config.TextConfig?.EnableMoeBlock ?? false;
         Tensor.Tensor ffOutput;
 
         if (enableMoe)
         {
-            ffOutput = MoeAndSharedBranch(normalized2, prefix, rmsEps);
+            ffOutput = MoeAndSharedBranch(attnResidual, prefix, rmsEps);
         }
         else
         {
-            var gateWeight = _loader.LoadTensor($"{prefix}.mlp.gate_proj.weight");
-            var upWeight = _loader.LoadTensor($"{prefix}.mlp.up_proj.weight");
-            var downWeight = _loader.LoadTensor($"{prefix}.mlp.down_proj.weight");
-            ffOutput = FeedForward.Forward(normalized2, gateWeight, upWeight, downWeight);
+            ffOutput = DenseFeedForward(attnResidual, prefix, rmsEps);
         }
 
-        // 6. Residual connection (skip-scaled)
-        return residual1 + ffOutput * skipScale;
+        // 6. Second residual + single per-layer skip_scale.
+        return (ffOutput + attnResidual) * skipScale;
+    }
+
+    /// <summary>
+    /// Runs the standard (non-MoE) feed-forward branch:
+    /// <c>pre_feedforward_layernorm → gated MLP → post_feedforward_layernorm</c>.
+    /// </summary>
+    /// <param name="attnResidual">Input activations after the first residual.</param>
+    /// <param name="prefix">Layer prefix, e.g. "model.language_model.layers.3".</param>
+    /// <param name="rmsEps">Epsilon used by all RMSNorm stages.</param>
+    private Tensor.Tensor DenseFeedForward(Tensor.Tensor attnResidual, string prefix, float rmsEps)
+    {
+        var preFfwNorm = _loader.LoadTensor($"{prefix}.pre_feedforward_layernorm.weight");
+        var postFfwNorm = _loader.TryLoadTensor($"{prefix}.post_feedforward_layernorm.weight");
+
+        var ffwIn = TensorOperations.RmsNorm(attnResidual, preFfwNorm, rmsEps);
+
+        var gateWeight = _loader.LoadTensor($"{prefix}.mlp.gate_proj.weight");
+        var upWeight = _loader.LoadTensor($"{prefix}.mlp.up_proj.weight");
+        var downWeight = _loader.LoadTensor($"{prefix}.mlp.down_proj.weight");
+        var ffwOut = FeedForward.Forward(ffwIn, gateWeight, upWeight, downWeight);
+
+        if (postFfwNorm != null)
+        {
+            ffwOut = TensorOperations.RmsNorm(ffwOut, postFfwNorm, rmsEps);
+        }
+
+        return ffwOut;
     }
 
     /// <summary>
     /// Runs the combined MoE + dense-shared (mlp2) feed-forward stage used in
-    /// Gemma-4 MoE variants. The MoE branch and the dense shared branch each
-    /// have their own pre- and post-RMSNorm; their outputs are summed and a
-    /// final combined post-FFW RMSNorm is applied. The result is returned
-    /// *before* the residual addition and skip-scaling.
+    /// Gemma-4 MoE variants. Mirrors the reference's <c>_forward_moe</c>:
+    /// <code>
+    ///   dense_out = post_ffw2_norm(mlp2(pre_ffw2_norm(x)))
+    ///   moe_out   = post_ffw1_norm(moe(pre_ffw_norm(x)))
+    ///   out       = post_ffw_norm(dense_out + moe_out)
+    /// </code>
     /// </summary>
-    /// <param name="normalized">Input activations after post-attention norm.</param>
+    /// <param name="attnResidual">Input activations after the first residual (no extra norm applied).</param>
     /// <param name="prefix">Layer prefix, e.g. "model.language_model.layers.3".</param>
     /// <param name="rmsEps">Epsilon used by all RMSNorm stages.</param>
-    private Tensor.Tensor MoeAndSharedBranch(Tensor.Tensor normalized, string prefix, float rmsEps)
+    private Tensor.Tensor MoeAndSharedBranch(Tensor.Tensor attnResidual, string prefix, float rmsEps)
     {
         var preMoeNorm = _loader.LoadTensor($"{prefix}.pre_feedforward_layernorm.weight");
         var preMlp2Norm = _loader.LoadTensor($"{prefix}.pre_feedforward_layernorm_2.weight");
@@ -304,7 +333,7 @@ public sealed class Gemma4Model
         var postCombinedNorm = _loader.LoadTensor($"{prefix}.post_feedforward_layernorm.weight");
 
         // MoE branch
-        var moeIn = TensorOperations.RmsNorm(normalized, preMoeNorm, rmsEps);
+        var moeIn = TensorOperations.RmsNorm(attnResidual, preMoeNorm, rmsEps);
         var routerProj = _loader.LoadTensor($"{prefix}.router.proj.weight");
         var routerScale = _loader.TryLoadTensor($"{prefix}.router.scale");
         var perExpertScale = _loader.TryLoadTensor($"{prefix}.router.per_expert_scale");
@@ -318,7 +347,7 @@ public sealed class Gemma4Model
         moeOut = TensorOperations.RmsNorm(moeOut, postMoeNorm, rmsEps);
 
         // Dense shared (mlp2) branch
-        var mlp2In = TensorOperations.RmsNorm(normalized, preMlp2Norm, rmsEps);
+        var mlp2In = TensorOperations.RmsNorm(attnResidual, preMlp2Norm, rmsEps);
         var gateWeight = _loader.LoadTensor($"{prefix}.mlp.gate_proj.weight");
         var upWeight = _loader.LoadTensor($"{prefix}.mlp.up_proj.weight");
         var downWeight = _loader.LoadTensor($"{prefix}.mlp.down_proj.weight");

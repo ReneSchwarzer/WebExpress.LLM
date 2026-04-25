@@ -15,6 +15,15 @@ namespace WebExpress.LLM.Gemma;
 /// </remarks>
 public sealed class MultiHeadAttention
 {
+    /// <summary>
+    /// Large negative value used to mask attention logits. Matches the Gemma
+    /// reference (<c>gemma/gm/nn/gemma4/_modules.py</c>, <c>K_MASK</c>). Using a
+    /// finite value rather than <see cref="float.NegativeInfinity"/> keeps the
+    /// softmax well-defined even when an entire row is masked (e.g. an empty
+    /// sliding window with bfloat16 later on).
+    /// </summary>
+    public const float MaskValue = -2.3819763e38f;
+
     private readonly int _numQueryHeads;
     private readonly int _numKvHeads;
     private readonly int _headDim;
@@ -69,6 +78,13 @@ public sealed class MultiHeadAttention
     /// <param name="kNormWeight">Optional per-head key RMSNorm weight of shape [kHeadDim], applied before RoPE.</param>
     /// <param name="rmsNormEpsilon">Epsilon used for the optional q/k RMSNorm operations.</param>
     /// <returns>The attention output of shape [seqLen, hiddenSize].</returns>
+    /// <remarks>
+    /// The Gemma-4 reference (<c>gemma/gm/nn/gemma4/_modules.Attention</c>) applies a
+    /// scale-less <c>value_norm</c> to V after the projection, before the KV-cache
+    /// update. It also computes the attention logits as a plain
+    /// <c>einsum('BTNH,BSNH-&gt;BTNS', q, k)</c> with no <c>1/sqrt(head_dim)</c> factor —
+    /// magnitude is regulated by the learnable <c>q_norm</c>/<c>k_norm</c> scales.
+    /// </remarks>
     public Tensor.Tensor Forward(
         Tensor.Tensor input,
         Tensor.Tensor qProjWeight,
@@ -156,6 +172,11 @@ public sealed class MultiHeadAttention
         {
             K = TensorOperations.RmsNorm(K, kNormWeight, rmsNormEpsilon);
         }
+
+        // Scale-less value_norm. Always applied in the Gemma-4 reference
+        // (`_layers.RMSNorm(with_scale=False)`); there is no learnable
+        // weight in the checkpoint for this norm.
+        V = TensorOperations.RmsNorm(V, weight: null, rmsNormEpsilon);
 
         // Apply RoPE to Q and K
         var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
@@ -342,22 +363,25 @@ public sealed class MultiHeadAttention
     }
 
     /// <summary>
-    /// Computes Q @ K^T / sqrt(dotDim) for each head independently, optionally
-    /// applying an attention-logits soft cap (<c>tanh(score / cap) * cap</c>)
-    /// before the softmax. When Q and K have different per-head dimensions,
-    /// the dot product is computed over the smaller dimension (kHeadDim).
+    /// Computes Q @ K^T per head, optionally applying an attention-logits soft
+    /// cap (<c>tanh(score / cap) * cap</c>) before the softmax. When Q and K
+    /// have different per-head dimensions the dot product is computed over the
+    /// smaller dimension (kHeadDim).
     /// </summary>
+    /// <remarks>
+    /// No <c>1/sqrt(head_dim)</c> factor is applied: the Gemma-4 reference
+    /// uses a plain einsum and relies on the learnable <c>q_norm</c>/<c>k_norm</c>
+    /// scales to control the score magnitude.
+    /// </remarks>
     private static Tensor.Tensor ComputeAttentionScores(
         Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int qHeadDim, int kHeadDim,
         float softcap)
     {
         var dotDim = Math.Min(qHeadDim, kHeadDim);
         var scores = new float[numHeads * queryLen * kvLen];
-        var scale = 1.0f / MathF.Sqrt(dotDim);
         var applySoftcap = softcap > 0f;
 
         Parallel.For(0, numHeads, h =>
-        //for (var h = 0; h < numHeads; h++)
         {
             var qOffset = h * queryLen * qHeadDim;
             var kOffset = h * kvLen * kHeadDim;
@@ -374,13 +398,10 @@ public sealed class MultiHeadAttention
                         dot += Q.Data[qOffset + i * qHeadDim + d] * K.Data[kOffset + j * kHeadDim + d];
                     }
 
-                    var score = dot * scale;
+                    var score = dot;
 
                     if (applySoftcap)
                     {
-                        // tanh bounds the score magnitude to ±softcap; applied
-                        // pre-mask so masked entries (−∞) pass through unchanged
-                        // after the caller overwrites them.
                         score = MathF.Tanh(score / softcap) * softcap;
                     }
 
@@ -410,14 +431,14 @@ public sealed class MultiHeadAttention
                     // Causal mask: cannot attend to future positions
                     if (j > queryPos)
                     {
-                        scores[h, i, j] = float.NegativeInfinity;
+                        scores[h, i, j] = MaskValue;
                         continue;
                     }
 
                     // Sliding window mask (only for sliding attention layers)
                     if (!_isFullAttention && queryPos - j >= _slidingWindowSize)
                     {
-                        scores[h, i, j] = float.NegativeInfinity;
+                        scores[h, i, j] = MaskValue;
                     }
                 }
             }

@@ -166,19 +166,18 @@ public static class TensorOperations
     /// Used in transformer models such as Gemma and Llama as a stable normalization technique.
     /// </remarks>
     /// <param name="input">The input tensor.</param>
-    /// <param name="weight">The normalization weight tensor (1D, same size as last dimension).</param>
+    /// <param name="weight">The normalization weight tensor (1D, same size as last dimension). Pass <c>null</c> for a scale-less RMSNorm, as used by Gemma-4 <c>value_norm</c> and the MoE <c>router_norm</c>.</param>
     /// <param name="epsilon">Small constant for numerical stability.</param>
     /// <returns>A new normalized tensor.</returns>
     public static Tensor RmsNorm(Tensor input, Tensor weight, float epsilon = 1e-6f)
     {
         ArgumentNullException.ThrowIfNull(input);
-        ArgumentNullException.ThrowIfNull(weight);
 
         var data = input.Data;
-        var wData = weight.Data;
         var lastDim = input.Shape[^1];
+        var wData = weight?.Data;
 
-        if (wData.Length != lastDim)
+        if (wData != null && wData.Length != lastDim)
         {
             throw new ArgumentException(
                 $"Weight dimension {wData.Length} does not match last input dimension {lastDim}.");
@@ -188,11 +187,9 @@ public static class TensorOperations
         var outerSize = data.Length / lastDim;
 
         Parallel.For(0, outerSize, outer =>
-        //for (var outer = 0; outer < outerSize; outer++)
         {
             var offset = outer * lastDim;
 
-            // Compute mean of squares
             var sumSquares = 0.0f;
 
             for (var i = 0; i < lastDim; i++)
@@ -202,10 +199,19 @@ public static class TensorOperations
 
             var rms = MathF.Sqrt(sumSquares / lastDim + epsilon);
 
-            // Normalize and apply weight
-            for (var i = 0; i < lastDim; i++)
+            if (wData == null)
             {
-                result[offset + i] = data[offset + i] / rms * wData[i];
+                for (var i = 0; i < lastDim; i++)
+                {
+                    result[offset + i] = data[offset + i] / rms;
+                }
+            }
+            else
+            {
+                for (var i = 0; i < lastDim; i++)
+                {
+                    result[offset + i] = data[offset + i] / rms * wData[i];
+                }
             }
         });
 
