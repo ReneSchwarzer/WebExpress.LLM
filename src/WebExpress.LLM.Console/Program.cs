@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using WebExpress.LLM.Chat;
@@ -159,8 +160,21 @@ internal class Program
                 // send the user's message to the chat session and stream the response
                 System.Console.Write("Assistant: ");
 
+                var tokenCount = 0;
+                var stopwatch = Stopwatch.StartNew();
+                var previousElapsedSeconds = 0.0;
+
                 await foreach (var textChunk in chatSession.SendAsync(userInput, maxNewTokens: maxNewTokens))
                 {
+                    tokenCount++;
+                    var elapsedSeconds = Math.Max(stopwatch.Elapsed.TotalSeconds, 1e-9);
+                    var tokensPerSecond = tokenCount / elapsedSeconds;
+                    var lastTokenSeconds = Math.Max(elapsedSeconds - previousElapsedSeconds, 0.0);
+                    previousElapsedSeconds = elapsedSeconds;
+
+                    WriteTopRightStatus(
+                        $"Token/s: {tokensPerSecond:0.000000}",
+                        $"Last: {lastTokenSeconds:0.000} s");
                     System.Console.Write(textChunk);
                 }
 
@@ -180,6 +194,47 @@ internal class Program
         model?.Dispose();
 
         return 0;
+    }
+
+    /// <summary>
+    /// Writes the specified status text to the top-right corner of the console window without altering 
+    /// the current cursor position.
+    /// </summary>
+    private static void WriteTopRightStatus(string text, string secondLine = null)
+    {
+        if (System.Console.IsOutputRedirected)
+        {
+            return;
+        }
+
+        try
+        {
+            var cursorLeft = System.Console.CursorLeft;
+            var cursorTop = System.Console.CursorTop;
+
+            var width = System.Console.WindowWidth;
+            var status1 = $"     {text}" ?? string.Empty;
+            var status2 = string.IsNullOrEmpty(secondLine) ? string.Empty : $"     {secondLine}";
+            var statusWidth = Math.Max(status1.Length, status2.Length);
+            var column = Math.Max(0, width - statusWidth);
+
+            System.Console.SetCursorPosition(column, 0);
+            System.Console.Write(status1.PadRight(statusWidth));
+
+            if (!string.IsNullOrEmpty(secondLine) && System.Console.WindowHeight > 1)
+            {
+                System.Console.SetCursorPosition(column, 1);
+                System.Console.Write(status2.PadRight(statusWidth));
+            }
+
+            System.Console.SetCursorPosition(cursorLeft, cursorTop);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+        }
+        catch (IOException)
+        {
+        }
     }
 
     /// <summary>
