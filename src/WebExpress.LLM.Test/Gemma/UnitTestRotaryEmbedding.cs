@@ -47,7 +47,9 @@ public sealed class UnitTestRotaryEmbedding
     }
 
     /// <summary>
-    /// Tests that applying the rotary embedding at a non-zero position rotates the values.
+    /// Tests that applying the rotary embedding at a non-zero position rotates
+    /// the values using the split-halves NeoX-style pattern (rotation pairs
+    /// are <c>(x_j, x_{j + H/2})</c>, not consecutive pairs).
     /// </summary>
     [Fact]
     public void Apply_2D_NonZeroPosition_ShouldRotateValues()
@@ -57,13 +59,22 @@ public sealed class UnitTestRotaryEmbedding
 
         var result = rope.Apply(input, startPosition: 1);
 
-        // At position 1, the first pair (i=0) should be rotated by angle = 1/theta^(0/4) = 1
-        var angle = 1.0f / MathF.Pow(10000, 0.0f / 4);
-        var cos0 = MathF.Cos(angle);
-        var sin0 = MathF.Sin(angle);
+        // headDim=4, half=2, ropeAngles=2 → rotates pairs (j=0,2) and (j=1,3).
+        //   j=0: x0=input[0,0]=1, x1=input[0,2]=0
+        //        result[0,0] = x0*cos(angle0) - x1*sin(angle0) = cos(angle0)
+        //        result[0,2] = x1*cos(angle0) + x0*sin(angle0) = sin(angle0)
+        //   j=1: x0=input[0,1]=0, x1=input[0,3]=1
+        //        result[0,1] = x0*cos(angle1) - x1*sin(angle1) = -sin(angle1)
+        //        result[0,3] = x1*cos(angle1) + x0*sin(angle1) = cos(angle1)
+        var freq0 = 1.0f / MathF.Pow(10000, 2.0f * 0 / 4);
+        var freq1 = 1.0f / MathF.Pow(10000, 2.0f * 1 / 4);
+        var angle0 = 1.0f * freq0;
+        var angle1 = 1.0f * freq1;
 
-        Assert.Equal(1.0f * cos0 - 0.0f * sin0, result[0, 0], 1e-4f);
-        Assert.Equal(1.0f * sin0 + 0.0f * cos0, result[0, 1], 1e-4f);
+        Assert.Equal(MathF.Cos(angle0), result[0, 0], 1e-4f);
+        Assert.Equal(-MathF.Sin(angle1), result[0, 1], 1e-4f);
+        Assert.Equal(MathF.Sin(angle0), result[0, 2], 1e-4f);
+        Assert.Equal(MathF.Cos(angle1), result[0, 3], 1e-4f);
     }
 
     /// <summary>
@@ -90,24 +101,32 @@ public sealed class UnitTestRotaryEmbedding
     }
 
     /// <summary>
-    /// Tests that applying a partial rotary embedding only rotates part of the dimension.
+    /// Tests that applying a partial rotary embedding only rotates the angle
+    /// pairs covered by the partial factor. Uses split-halves geometry, so
+    /// for headDim=4 with partial=0.5 only the (j=0, j=2) pair rotates and
+    /// indices 1 and 3 stay untouched.
     /// </summary>
     [Fact]
     public void Apply_PartialRotary_ShouldOnlyRotatePartOfDimension()
     {
-        // partialRotaryFactor=0.5 means only first half of dims are rotated
         var rope = new RotaryEmbedding(theta: 10000, partialRotaryFactor: 0.5f);
         var input = new WebExpress.LLM.Tensor.Tensor([1, 4], [1f, 2, 3, 4]);
 
         var result = rope.Apply(input, startPosition: 5);
 
-        // Last 2 dims should be untouched
-        Assert.Equal(3.0f, result[0, 2], 1e-4f);
+        // ropeAngles = (int)(0.5 * 4 / 2) = 1 → only j=0 pair rotates.
+        // Indices 1 (= j=1 in first half, beyond ropeAngles) and 3 (= j=1 in
+        // second half) stay at their original values.
+        Assert.Equal(2.0f, result[0, 1], 1e-4f);
         Assert.Equal(4.0f, result[0, 3], 1e-4f);
 
-        // First 2 dims should be rotated (values changed)
-        // At position 5, first pair should be different from input
-        Assert.NotEqual(1.0f, result[0, 0], 1e-2f);
+        // The (j=0) pair (index 0 ↔ index 2) is rotated by angle = 5.
+        var angle0 = 5.0f * (1.0f / MathF.Pow(10000, 2.0f * 0 / 4));
+        var cos0 = MathF.Cos(angle0);
+        var sin0 = MathF.Sin(angle0);
+
+        Assert.Equal(1.0f * cos0 - 3.0f * sin0, result[0, 0], 1e-4f);
+        Assert.Equal(3.0f * cos0 + 1.0f * sin0, result[0, 2], 1e-4f);
     }
 
     /// <summary>

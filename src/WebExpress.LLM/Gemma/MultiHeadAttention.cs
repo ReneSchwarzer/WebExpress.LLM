@@ -15,6 +15,15 @@ namespace WebExpress.LLM.Gemma;
 /// </remarks>
 public sealed class MultiHeadAttention
 {
+    /// <summary>
+    /// Large negative value used to mask attention logits. Matches the Gemma
+    /// reference (<c>gemma/gm/nn/gemma4/_modules.py</c>, <c>K_MASK</c>). Using a
+    /// finite value rather than <see cref="float.NegativeInfinity"/> keeps the
+    /// softmax well-defined even when an entire row is masked (e.g. an empty
+    /// sliding window with bfloat16 later on).
+    /// </summary>
+    public const float MaskValue = -1e30f;
+
     private readonly int _numQueryHeads;
     private readonly int _numKvHeads;
     private readonly int _headDim;
@@ -60,15 +69,28 @@ public sealed class MultiHeadAttention
     /// </summary>
     /// <param name="input">Input tensor of shape [seqLen, hiddenSize].</param>
     /// <param name="qProjWeight">Query projection weight [numQueryHeads * headDim, hiddenSize].</param>
-    /// <param name="kProjWeight">Key projection weight [numKvHeads * headDim, hiddenSize].</param>
-    /// <param name="vProjWeight">Value projection weight [numKvHeads * headDim, hiddenSize].</param>
+    /// <param name="kProjWeight">Key projection weight [numKvHeads * headDim, hiddenSize].
+    /// May be <c>null</c> when <paramref name="kvSharingTargetLayer"/> is set.</param>
+    /// <param name="vProjWeight">Value projection weight [numKvHeads * headDim, hiddenSize].
+    /// May be <c>null</c> when <paramref name="kvSharingTargetLayer"/> is set.</param>
     /// <param name="oProjWeight">Output projection weight [hiddenSize, numQueryHeads * headDim].</param>
     /// <param name="kvCache">Optional KV cache for autoregressive generation.</param>
     /// <param name="layerIndex">The layer index (used for KV cache keying).</param>
     /// <param name="qNormWeight">Optional per-head query RMSNorm weight of shape [qHeadDim], applied before RoPE.</param>
-    /// <param name="kNormWeight">Optional per-head key RMSNorm weight of shape [kHeadDim], applied before RoPE.</param>
+    /// <param name="kNormWeight">Optional per-head key RMSNorm weight of shape [kHeadDim], applied before RoPE.
+    /// Ignored when <paramref name="kvSharingTargetLayer"/> is set.</param>
     /// <param name="rmsNormEpsilon">Epsilon used for the optional q/k RMSNorm operations.</param>
+    /// <param name="kvSharingTargetLayer">When set, the layer reuses K/V from the
+    /// specified target layer's KV cache instead of computing its own K/V projections.
+    /// Mirrors vLLM's <c>num_kv_shared_layers</c> mechanism (gemma4.py:520-533).</param>
     /// <returns>The attention output of shape [seqLen, hiddenSize].</returns>
+    /// <remarks>
+    /// The Gemma-4 reference (<c>gemma/gm/nn/gemma4/_modules.Attention</c>) applies a
+    /// scale-less <c>value_norm</c> to V after the projection, before the KV-cache
+    /// update. It also computes the attention logits as a plain
+    /// <c>einsum('BTNH,BSNH-&gt;BTNS', q, k)</c> with no <c>1/sqrt(head_dim)</c> factor —
+    /// magnitude is regulated by the learnable <c>q_norm</c>/<c>k_norm</c> scales.
+    /// </remarks>
     public Tensor.Tensor Forward(
         Tensor.Tensor input,
         Tensor.Tensor qProjWeight,
@@ -79,7 +101,8 @@ public sealed class MultiHeadAttention
         int layerIndex = 0,
         Tensor.Tensor qNormWeight = null,
         Tensor.Tensor kNormWeight = null,
-        float rmsNormEpsilon = 1e-6f)
+        float rmsNormEpsilon = 1e-6f,
+        int? kvSharingTargetLayer = null)
     {
         var seqLen = input.Shape[0];
         var hiddenSize = input.Shape[1];
@@ -88,23 +111,10 @@ public sealed class MultiHeadAttention
         //    $"numQueryHeads={_numQueryHeads}, numKvHeads={_numKvHeads}, headDim={_headDim}, " +
         //    $"isFullAttention={_isFullAttention}, slidingWindowSize={_slidingWindowSize}");
 
-        // Project to Q, K, V: [seqLen, hiddenSize] × [hiddenSize, numHeads*headDim]
+        // Project to Q always; K/V only when not KV-shared.
         var qProj = TensorOperations.MatMul(input, Transpose2D(qProjWeight));
-        var kProj = TensorOperations.MatMul(input, Transpose2D(kProjWeight));
-        var vProj = TensorOperations.MatMul(input, Transpose2D(vProjWeight));
 
-        // Derive actual head dimensions from the projected tensor shapes
-        // to avoid mismatches between config values and real weight sizes.
-        // In Gemma-4 full attention layers with attention_k_eq_v:
-        //   Q uses global_head_dim (e.g. 512) per query head
-        //   K uses head_dim (e.g. 128) per KV head
-        //   V shares K's weight, so also uses head_dim per KV head
-        //   O expects numQueryHeads * global_head_dim (matches Q)
-        // The gap between vHeadDim and the o_proj expected dimension is
-        // bridged by concatenating unused Q dimensions ("pass-through").
         var qProjDim = qProj.Shape[1];
-        var kProjDim = kProj.Shape[1];
-        var vProjDim = vProj.Shape[1];
 
         if (qProjDim % _numQueryHeads != 0)
         {
@@ -112,21 +122,7 @@ public sealed class MultiHeadAttention
                 $"Q projection dimension {qProjDim} is not evenly divisible by the number of query heads {_numQueryHeads}.");
         }
 
-        if (kProjDim % _numKvHeads != 0)
-        {
-            throw new InvalidOperationException(
-                $"K projection dimension {kProjDim} is not evenly divisible by the number of KV heads {_numKvHeads}.");
-        }
-
-        if (vProjDim % _numKvHeads != 0)
-        {
-            throw new InvalidOperationException(
-                $"V projection dimension {vProjDim} is not evenly divisible by the number of KV heads {_numKvHeads}.");
-        }
-
         var qHeadDim = qProjDim / _numQueryHeads;
-        var kHeadDim = kProjDim / _numKvHeads;
-        var vHeadDim = vProjDim / _numKvHeads;
 
         // Derive the expected per-head output dimension from the o_proj weight.
         // o_proj weight shape: [hiddenSize, numQueryHeads * outputHeadDim]
@@ -140,38 +136,100 @@ public sealed class MultiHeadAttention
 
         var outputHeadDim = oProjInputDim / _numQueryHeads;
 
-        // Reshape to [numHeads, seqLen, headDim]
+        // Reshape Q to [numHeads, seqLen, headDim] and apply Q-norm + RoPE.
         var Q = ReshapeToHeads(qProj, _numQueryHeads, seqLen, qHeadDim);
-        var K = ReshapeToHeads(kProj, _numKvHeads, seqLen, kHeadDim);
-        var V = ReshapeToHeads(vProj, _numKvHeads, seqLen, vHeadDim);
 
-        // Per-head RMSNorm on Q and K (Gemma-4 uses q_norm/k_norm before RoPE).
-        // RmsNorm normalises over the last dimension, which is the head dimension here.
         if (qNormWeight != null)
         {
             Q = TensorOperations.RmsNorm(Q, qNormWeight, rmsNormEpsilon);
         }
 
-        if (kNormWeight != null)
-        {
-            K = TensorOperations.RmsNorm(K, kNormWeight, rmsNormEpsilon);
-        }
-
-        // Apply RoPE to Q and K
         var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
         Q = _rope.Apply(Q, startPosition);
-        K = _rope.Apply(K, startPosition);
 
-        // Update KV cache
-        if (kvCache != null)
+        Tensor.Tensor K;
+        Tensor.Tensor V;
+        int kHeadDim;
+        int vHeadDim;
+
+        if (kvSharingTargetLayer.HasValue)
         {
-            kvCache.Update(layerIndex, K, V);
-            var cached = kvCache.Get(layerIndex);
-            K = cached.Keys;
-            V = cached.Values;
+            // Shared layer: read K/V from the target layer's cache. K/V have
+            // already had their own k_norm + v_norm + RoPE applied during
+            // the target layer's forward pass.
+            if (kvCache == null)
+            {
+                throw new InvalidOperationException(
+                    "kvSharingTargetLayer requires a non-null kvCache.");
+            }
+
+            var sharedCached = kvCache.Get(kvSharingTargetLayer.Value);
+            K = sharedCached.Keys;
+            V = sharedCached.Values;
+            kHeadDim = K.Shape[2];
+            vHeadDim = V.Shape[2];
+        }
+        else
+        {
+            ArgumentNullException.ThrowIfNull(kProjWeight);
+            ArgumentNullException.ThrowIfNull(vProjWeight);
+
+            var kProj = TensorOperations.MatMul(input, Transpose2D(kProjWeight));
+            var vProj = TensorOperations.MatMul(input, Transpose2D(vProjWeight));
+
+            // Derive actual head dimensions from the projected tensor shapes
+            // to avoid mismatches between config values and real weight sizes.
+            // In Gemma-4 full attention layers with attention_k_eq_v:
+            //   Q uses global_head_dim (e.g. 512) per query head
+            //   K uses head_dim (e.g. 128) per KV head
+            //   V shares K's weight, so also uses head_dim per KV head
+            //   O expects numQueryHeads * global_head_dim (matches Q)
+            // The gap between vHeadDim and the o_proj expected dimension is
+            // bridged by concatenating unused Q dimensions ("pass-through").
+            var kProjDim = kProj.Shape[1];
+            var vProjDim = vProj.Shape[1];
+
+            if (kProjDim % _numKvHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"K projection dimension {kProjDim} is not evenly divisible by the number of KV heads {_numKvHeads}.");
+            }
+
+            if (vProjDim % _numKvHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"V projection dimension {vProjDim} is not evenly divisible by the number of KV heads {_numKvHeads}.");
+            }
+
+            kHeadDim = kProjDim / _numKvHeads;
+            vHeadDim = vProjDim / _numKvHeads;
+
+            K = ReshapeToHeads(kProj, _numKvHeads, seqLen, kHeadDim);
+            V = ReshapeToHeads(vProj, _numKvHeads, seqLen, vHeadDim);
+
+            // per-head RMSNorm on K (Gemma-4 uses q_norm/k_norm before RoPE).
+            if (kNormWeight != null)
+            {
+                K = TensorOperations.RmsNorm(K, kNormWeight, rmsNormEpsilon);
+            }
+
+            // scale-less value_norm
+            V = TensorOperations.RmsNormNoWeight(V, rmsNormEpsilon);
+
+            // apply RoPE to K
+            K = _rope.Apply(K, startPosition);
+
+            // update own KV cache
+            if (kvCache != null)
+            {
+                kvCache.Update(layerIndex, K, V);
+                var cached = kvCache.Get(layerIndex);
+                K = cached.Keys;
+                V = cached.Values;
+            }
         }
 
-        // Handle GQA: repeat K,V heads to match Q heads
+        // handle GQA: repeat K,V heads to match Q heads
         if (_numKvHeads < _numQueryHeads)
         {
             var repeatFactor = _numQueryHeads / _numKvHeads;
@@ -190,10 +248,10 @@ public sealed class MultiHeadAttention
         // Apply attention mask
         ApplyMask(scores, seqLen, kvSeqLen, startPosition);
 
-        // Softmax over last dimension
-        scores = TensorOperations.Softmax(scores);
+        // softmax over last dimension (numerically stable)
+        scores = TensorOperations.SoftmaxStable(scores);
 
-        // Attention output: scores @ V (result has vHeadDim per head)
+        // attention output: scores @ V (result has vHeadDim per head)
         var attnOutput = ComputeAttentionOutput(scores, V, _numQueryHeads, seqLen, kvSeqLen, vHeadDim);
 
         // When V's per-head dimension (vHeadDim) is smaller than what o_proj
@@ -342,22 +400,25 @@ public sealed class MultiHeadAttention
     }
 
     /// <summary>
-    /// Computes Q @ K^T / sqrt(dotDim) for each head independently, optionally
-    /// applying an attention-logits soft cap (<c>tanh(score / cap) * cap</c>)
-    /// before the softmax. When Q and K have different per-head dimensions,
-    /// the dot product is computed over the smaller dimension (kHeadDim).
+    /// Computes Q @ K^T per head, optionally applying an attention-logits soft
+    /// cap (<c>tanh(score / cap) * cap</c>) before the softmax. When Q and K
+    /// have different per-head dimensions the dot product is computed over the
+    /// smaller dimension (kHeadDim).
     /// </summary>
+    /// <remarks>
+    /// No <c>1/sqrt(head_dim)</c> factor is applied: the Gemma-4 reference
+    /// uses a plain einsum and relies on the learnable <c>q_norm</c>/<c>k_norm</c>
+    /// scales to control the score magnitude.
+    /// </remarks>
     private static Tensor.Tensor ComputeAttentionScores(
         Tensor.Tensor Q, Tensor.Tensor K, int numHeads, int queryLen, int kvLen, int qHeadDim, int kHeadDim,
         float softcap)
     {
         var dotDim = Math.Min(qHeadDim, kHeadDim);
         var scores = new float[numHeads * queryLen * kvLen];
-        var scale = 1.0f / MathF.Sqrt(dotDim);
         var applySoftcap = softcap > 0f;
 
         Parallel.For(0, numHeads, h =>
-        //for (var h = 0; h < numHeads; h++)
         {
             var qOffset = h * queryLen * qHeadDim;
             var kOffset = h * kvLen * kHeadDim;
@@ -374,13 +435,10 @@ public sealed class MultiHeadAttention
                         dot += Q.Data[qOffset + i * qHeadDim + d] * K.Data[kOffset + j * kHeadDim + d];
                     }
 
-                    var score = dot * scale;
+                    var score = dot;
 
                     if (applySoftcap)
                     {
-                        // tanh bounds the score magnitude to ±softcap; applied
-                        // pre-mask so masked entries (−∞) pass through unchanged
-                        // after the caller overwrites them.
                         score = MathF.Tanh(score / softcap) * softcap;
                     }
 
@@ -410,14 +468,14 @@ public sealed class MultiHeadAttention
                     // Causal mask: cannot attend to future positions
                     if (j > queryPos)
                     {
-                        scores[h, i, j] = float.NegativeInfinity;
+                        scores[h, i, j] = MaskValue;
                         continue;
                     }
 
                     // Sliding window mask (only for sliding attention layers)
                     if (!_isFullAttention && queryPos - j >= _slidingWindowSize)
                     {
-                        scores[h, i, j] = float.NegativeInfinity;
+                        scores[h, i, j] = MaskValue;
                     }
                 }
             }

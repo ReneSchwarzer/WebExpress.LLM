@@ -4,7 +4,17 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:api.github.com)",
       "Bash(dotnet test *)",
-      "Bash(dotnet build *)"
+      "Bash(dotnet build *)",
+      "Bash(mkdir -p /tmp/vllm-extract)",
+      "Bash(unzip -q -o vllm-main.zip -d /tmp/vllm-extract/)",
+      "Read(//tmp/**)",
+      "Bash(xargs grep *)",
+      "Bash(cp /tmp/vllm-extract/vllm-main/vllm/model_executor/models/gemma4.py /c/Users/Rene/source/repos/WebExpress.LLM/.tmp_vllm_gemma4.py)",
+      "Bash(cp /tmp/vllm-extract/vllm-main/vllm/model_executor/layers/rotary_embedding/gemma4_rope.py /c/Users/Rene/source/repos/WebExpress.LLM/.tmp_vllm_gemma4_rope.py)",
+      "Bash(cp /tmp/vllm-extract/vllm-main/vllm/model_executor/models/gemma3.py /c/Users/Rene/source/repos/WebExpress.LLM/.tmp_vllm_gemma3.py)",
+      "Bash(git stash *)",
+      "Bash(rm -f .tmp_vllm_gemma3.py .tmp_vllm_gemma4.py .tmp_vllm_gemma4_rope.py vllm-main.zip)",
+      "Bash(rm -rf /tmp/vllm-extract)"
     ]
   }
 }
