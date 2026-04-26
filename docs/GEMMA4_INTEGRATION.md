@@ -86,13 +86,32 @@ Each layer (as defined in `Gemma4Model.TransformerLayer`) performs:
     - Uses a distinct KV-head count for full-attention layers (`num_global_key_value_heads`).
     - Optional per-head **QK-Norm** (`self_attn.q_norm`, `self_attn.k_norm`) before RoPE.
     - Optional **attention-logits soft cap** (`attn_logit_softcapping`) applied pre-softmax.
-    - Handles `attention_key_equals_value` for specific model variants.
-3.  **Skip-Scaled Residual Connection**: Adds the attention output (multiplied by the per-layer `layer_scalar`) to the input.
-4.  **Post-Attention Normalization**: Second RMS norm before the feed-forward stage.
+    - Handles `attention_key_equals_value` for full-attention layers only — sliding
+      layers always have their own `v_proj.weight` even when the flag is set.
+    - **Cross-layer KV-cache sharing**: when `num_kv_shared_layers > 0`, the last
+      N layers reuse K/V from the most recent earlier layer of the same
+      attention type and skip their own K/V projections + K-norm + V-norm + RoPE on K.
+3.  **Post-Attention Normalization**: Applied to the attention output, before the
+    first residual addition (matches vLLM `Gemma4DecoderLayer.forward`).
+4.  **First Residual Connection**: `attn_residual = post_attn_norm(attn) + hidden`.
 5.  **Feed-Forward Stage**:
-    - **MoE variants** (`enable_moe_block=true`, e.g. 26B_A4B): a Mixture-of-Experts branch and a dense shared branch (mlp2) run in parallel, each with its own pre- and post-RMSNorm; the outputs are summed and a combined post-FFW RMSNorm is applied before the residual.
-    - **Non-MoE variants**: a single gated feed-forward network (`gate_proj`/`up_proj`/`down_proj`).
-6.  **Skip-Scaled Final Residual Connection**: Adds the feed-forward output (multiplied by `layer_scalar`) back to the residual.
+    - **MoE variants** (`enable_moe_block=true`, e.g. 26B_A4B): a dense MLP branch
+      and a Mixture-of-Experts branch run in parallel on the same input.
+      The dense branch uses `pre_feedforward_layernorm` →
+      `mlp` (`gate_proj`/`up_proj`/`down_proj`) →
+      `post_feedforward_layernorm_1`. The MoE branch uses
+      `pre_feedforward_layernorm_2` → `moe` →
+      `post_feedforward_layernorm_2`. Both outputs are summed and passed
+      through the combined `post_feedforward_layernorm`.
+    - **Non-MoE variants**: a single gated feed-forward network (`pre_feedforward_layernorm` →
+      `gate_proj`/`up_proj`/`down_proj` → `post_feedforward_layernorm`).
+6.  **Second Residual Connection**: `residual = ff_output + attn_residual`.
+7.  **Per-Layer Embedding (PLE)** *(when `hidden_size_per_layer_input > 0`)*: the
+    layer-specific PLE input is gated through `per_layer_input_gate`, projected
+    with `per_layer_projection`, normed with `post_per_layer_input_norm`, then
+    added to `residual`.
+8.  **Per-Layer Skip Scale**: the entire layer output is multiplied once by the
+    per-layer `layer_scalar` weight (default 1.0).
 
 ### 4. Rotary Positional Embeddings (RoPE)
 Implemented in the `RotaryEmbedding` class, supporting:
@@ -103,20 +122,44 @@ Implemented in the `RotaryEmbedding` class, supporting:
 ### 5. Efficient Generation (KV Cache)
 The `KvCache` class manages the storage of key and value tensors across generation steps, drastically reducing the computational cost for long sequences by avoiding redundant processing of previous tokens.
 
-## Deferred Features (Checked at Load Time)
+## Reference Alignment with vLLM
 
-`Gemma4Model.Forward` refuses to run a checkpoint that requests any of the
-following — guarded to prevent silent mis-inference:
+The C# implementation is verified against the vLLM Gemma-4 reference
+(`vllm/model_executor/models/gemma4.py`). Notable algorithmic decisions
+that mirror the reference:
 
-- `hidden_size_per_layer_input > 0` — per-layer input (PLE) projections. Not
-  used by 26B_A4B. Reference implementation:
-  `gemma/gm/nn/gemma4/layers.py` (`PerLayerInputProjection`).
-- `num_kv_shared_layers > 0` — KV-cache sharing where trailing layers reuse
-  K/V from an earlier layer. Not used by 26B_A4B.
-- `use_double_wide_mlp == true` — double-wide dense MLP variant.
+- **Embedding normaliser**: `embed_lookup * sqrt(hidden_size)` is applied
+  after the token-ID lookup (vLLM `Gemma4Model.embed_input_ids`).
+- **No 1/sqrt(head_dim) attention scaling**: Gemma-4 sets `scaling = 1.0`
+  and relies on the learnable `q_norm`/`k_norm` weights to control the
+  pre-softmax magnitude (vLLM `gemma4.py:400-403`).
+- **MoE branch wiring**: the dense MLP uses `pre_feedforward_layernorm` /
+  `post_feedforward_layernorm_1`; the MoE branch uses
+  `pre_feedforward_layernorm_2` / `post_feedforward_layernorm_2`; the
+  combined output passes through `post_feedforward_layernorm` (vLLM
+  `Gemma4DecoderLayer.forward`, lines 720-737).
+- **Router pipeline**: scale-less RMSNorm → `1/sqrt(hidden_size)` →
+  per-feature learned `scale` → expert projection (vLLM
+  `Gemma4Router.forward`).
+- **PLE input combination**: `(per_layer_projection + per_layer_embeds) *
+  rsqrt(2)` (vLLM `project_per_layer_inputs`).
 
-Each guard throws `NotSupportedException` on model invocation rather than
-returning wrong tokens.
+## Previously Deferred Features (Now Supported)
+
+The following features were previously guarded with `NotSupportedException`
+and are now implemented:
+
+- `hidden_size_per_layer_input > 0` — Per-Layer Embedding (PLE). See
+  `WebExpress.LLM.Gemma.PerLayerEmbedding` for the model-level
+  pre-computation and per-layer contribution helpers.
+- `num_kv_shared_layers > 0` — Cross-layer KV-cache sharing.
+  `MultiHeadAttention.Forward` accepts an optional
+  `kvSharingTargetLayer` parameter; when set, K/V are read from the
+  target layer's cache and the shared layer skips K/V projection,
+  K-norm, V-norm and K-RoPE.
+- `use_double_wide_mlp == true` — supported transparently because
+  `FeedForward.Forward` derives the intermediate size from the actual
+  weight shapes rather than the config value.
 
 ## Implementation Roadmap (Next Steps)
 
@@ -124,7 +167,6 @@ returning wrong tokens.
 2.  **Phase 2**: Optional GPU acceleration via Compute Shaders or DirectCompute.
 3.  **Phase 3**: Quantization support (Q4_K, Q8_0) to reduce memory footprint.
 4.  **Phase 4**: Multi-modal support (Vision/Audio) as per Gemma-4 specifications.
-5.  **Phase 5**: Lift the deferred-feature guards listed above (PLE, KV-cache sharing, double-wide MLP).
 
 ## Testing Strategy
 
@@ -139,3 +181,6 @@ The implementation is verified through:
 - [SafeTensors Format](https://github.com/huggingface/safetensors)
 - [RoPE: Rotary Position Embedding](https://arxiv.org/abs/2104.09864)
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
+- [vLLM Gemma-4 reference](https://github.com/vllm-project/vllm) — file
+  `vllm/model_executor/models/gemma4.py`. The C# implementation is
+  cross-checked against this file for numerical parity.

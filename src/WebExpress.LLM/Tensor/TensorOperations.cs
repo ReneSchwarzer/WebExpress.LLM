@@ -132,6 +132,66 @@ public static class TensorOperations
     }
 
     /// <summary>
+    /// Computes the softmax probability distribution along the last dimension of the
+    /// input tensor using a numerically stable method.
+    /// </summary>
+    /// <param name="input">
+    /// The input tensor whose values along the last dimension will be converted into
+    /// probabilities. Must not be null.
+    /// </param>
+    /// <returns>
+    /// A new tensor with the same shape as the input tensor, where the values along
+    /// the last dimension are normalized into probabilities. The values within each
+    /// softmax group sum to 1.
+    /// </returns>
+    public static Tensor SoftmaxStable(Tensor input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var data = input.Data;
+        var result = new float[data.Length];
+        var lastDim = input.Shape[^1];
+        var outerSize = data.Length / lastDim;
+
+        for (int outer = 0; outer < outerSize; outer++)
+        {
+            int offset = outer * lastDim;
+
+            // 1. find the maximum value for numerical stability
+            float max = float.NegativeInfinity;
+            for (int i = 0; i < lastDim; i++)
+            {
+                float v = data[offset + i];
+                if (v > max) max = v;
+            }
+
+            // 2. compute exp(x - max) while preventing overflow
+            float sum = 0f;
+            for (int i = 0; i < lastDim; i++)
+            {
+                float z = data[offset + i] - max;
+
+                // clamp to prevent overflow
+                if (z > 80f) z = 80f;     // exp(80) ≈ 5.54e34 → still safe in float32
+                if (z < -80f) z = -80f;   // exp(-80) ≈ 1.8e-35 → cleanly underflows to 0
+
+                float e = MathF.Exp(z);
+                result[offset + i] = e;
+                sum += e;
+            }
+
+            // 3. normalize
+            float inv = 1f / sum;
+            for (int i = 0; i < lastDim; i++)
+            {
+                result[offset + i] *= inv;
+            }
+        }
+
+        return new Tensor(ToIntArray(input.Shape), result);
+    }
+
+    /// <summary>
     /// Applies the GELU (Gaussian Error Linear Unit) activation function element-wise.
     /// Uses the approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
     /// </summary>
@@ -217,6 +277,45 @@ public static class TensorOperations
 
         return new Tensor(ToIntArray(input.Shape), result);
     }
+
+    /// <summary>
+    /// Computes the root-mean-square (RMS) normalization of the input tensor along its last dimension without 
+    /// applying any weights.
+    /// </summary>
+    public static Tensor RmsNormNoWeight(Tensor input, float epsilon = 1e-6f)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+
+        var data = input.Data;
+        var lastDim = input.Shape[^1];
+        var result = new float[data.Length];
+        var outerSize = data.Length / lastDim;
+
+        Parallel.For(0, outerSize, outer =>
+        {
+            var offset = outer * lastDim;
+
+            // Compute mean of squares
+            float sumSquares = 0f;
+            for (int i = 0; i < lastDim; i++)
+            {
+                float v = data[offset + i];
+                sumSquares += v * v;
+            }
+
+            // Root-mean-square
+            float rms = MathF.Sqrt(sumSquares / lastDim + epsilon);
+
+            // Normalize (no weight)
+            for (int i = 0; i < lastDim; i++)
+            {
+                result[offset + i] = data[offset + i] / rms;
+            }
+        });
+
+        return new Tensor(ToIntArray(input.Shape), result);
+    }
+
 
     /// <summary>
     /// Applies the hyperbolic tangent function element-wise.
