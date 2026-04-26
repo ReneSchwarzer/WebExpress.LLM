@@ -41,6 +41,12 @@ public sealed class GenerationConfig
     public int? Seed { get; init; }
 
     /// <summary>
+    /// Gets the repetition penalty factor applied to already-generated tokens.
+    /// Values greater than 1.0 penalize repeats; 1.0 disables the penalty.
+    /// </summary>
+    public float RepetitionPenalty { get; init; } = 1.0f;
+
+    /// <summary>
     /// Creates and returns an appropriate sampling strategy based on the configured parameters.
     /// </summary>
     /// <remarks>Only one sampling strategy can be selected at a time. If both TopK and TopP are unset, greedy
@@ -57,14 +63,14 @@ public sealed class GenerationConfig
 
         if (TopK.HasValue)
         {
-            return new TopKSampling(TopK.Value, Seed);
+            return new TopKSampling(TopK.Value, Seed, RepetitionPenalty);
         }
 
         if (TopP.HasValue)
         {
-            return new TopPSampling(TopP.Value, Seed);
+            return new TopPSampling(TopP.Value, Seed, RepetitionPenalty);
         }
 
-        return new GreedySampling();
+        return new GreedySampling(RepetitionPenalty);
     }
 }

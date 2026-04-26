@@ -1,4 +1,5 @@
 using System;
+using WebExpress.LLM.SafeTensors;
 using WebExpress.LLM.Tensor;
 
 namespace WebExpress.LLM.Gemma;
@@ -123,6 +124,84 @@ public static class PerLayerEmbedding
         var normalised = TensorOperations.RmsNorm(reshaped, perLayerProjectionNormWeight, rmsEps);
 
         // 5. Combine: (projection + per_layer_embeds) * (1/sqrt(2))
+        var combinedScale = 1.0f / MathF.Sqrt(2.0f);
+        var normData = normalised.Data;
+        var combined = new float[seqLen * totalPleDim];
+
+        for (var i = 0; i < combined.Length; i++)
+        {
+            combined[i] = (normData[i] + perLayerEmbeds[i]) * combinedScale;
+        }
+
+        return new Tensor.Tensor([seqLen, numLayers, hiddenSizePerLayerInput], combined);
+    }
+
+    /// <summary>
+    /// Computes per-layer inputs using row-wise loading from large PLE embedding tables.
+    /// This avoids materializing the full <c>embed_tokens_per_layer</c> tensor in memory.
+    /// </summary>
+    public static Tensor.Tensor BuildPerLayerInputsFromLoader(
+        Tensor.Tensor inputsEmbeds,
+        int[] tokenIds,
+        ISafeTensorLoader loader,
+        string embedTokensPerLayerTensorName,
+        Tensor.Tensor perLayerModelProjection,
+        Tensor.Tensor perLayerProjectionNormWeight,
+        int hiddenSize,
+        int numLayers,
+        int hiddenSizePerLayerInput,
+        int vocabSizePerLayerInput,
+        float rmsEps = 1e-6f)
+    {
+        ArgumentNullException.ThrowIfNull(inputsEmbeds);
+        ArgumentNullException.ThrowIfNull(tokenIds);
+        ArgumentNullException.ThrowIfNull(loader);
+        ArgumentException.ThrowIfNullOrWhiteSpace(embedTokensPerLayerTensorName);
+        ArgumentNullException.ThrowIfNull(perLayerModelProjection);
+        ArgumentNullException.ThrowIfNull(perLayerProjectionNormWeight);
+
+        if (numLayers <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(numLayers));
+        }
+
+        if (hiddenSizePerLayerInput <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hiddenSizePerLayerInput));
+        }
+
+        var seqLen = tokenIds.Length;
+        var totalPleDim = checked(numLayers * hiddenSizePerLayerInput);
+
+        var embedScale = MathF.Sqrt(hiddenSizePerLayerInput);
+        var perLayerEmbeds = new float[seqLen * totalPleDim];
+        var rowBuffer = new float[totalPleDim];
+
+        for (var i = 0; i < seqLen; i++)
+        {
+            var id = tokenIds[i];
+
+            if (id < 0 || id >= vocabSizePerLayerInput)
+            {
+                continue;
+            }
+
+            loader.LoadTensorRow(embedTokensPerLayerTensorName, id, rowBuffer);
+
+            var dstOffset = i * totalPleDim;
+            for (var d = 0; d < totalPleDim; d++)
+            {
+                perLayerEmbeds[dstOffset + d] = rowBuffer[d] * embedScale;
+            }
+        }
+
+        var projection = TensorOperations.MatMul(inputsEmbeds, perLayerModelProjection.Transpose());
+        var projectionScale = 1.0f / MathF.Sqrt(hiddenSize);
+        projection *= projectionScale;
+
+        var reshaped = projection.Reshape(seqLen, numLayers, hiddenSizePerLayerInput);
+        var normalised = TensorOperations.RmsNorm(reshaped, perLayerProjectionNormWeight, rmsEps);
+
         var combinedScale = 1.0f / MathF.Sqrt(2.0f);
         var normData = normalised.Data;
         var combined = new float[seqLen * totalPleDim];

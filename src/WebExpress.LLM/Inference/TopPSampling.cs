@@ -12,6 +12,7 @@ public sealed class TopPSampling : ISamplingStrategy
 {
     private readonly float _p;
     private readonly Random _random;
+    private readonly float _repetitionPenalty;
 
     /// <summary>
     /// Initializes a new instance of the TopPSampling class with the specified threshold  
@@ -27,15 +28,21 @@ public sealed class TopPSampling : ISamplingStrategy
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="p"/> is less than or equal to 0 or greater than 1.
     /// </exception>
-    public TopPSampling(float p, int? seed = null)
+    public TopPSampling(float p, int? seed = null, float repetitionPenalty = 1.0f)
     {
         if (p <= 0.0f || p > 1.0f)
         {
             throw new ArgumentOutOfRangeException(nameof(p), "p must be in the range (0, 1].");
         }
 
+        if (repetitionPenalty <= 0.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(repetitionPenalty), "Repetition penalty must be greater than zero.");
+        }
+
         _p = p;
         _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _repetitionPenalty = repetitionPenalty;
     }
 
     /// <summary>
@@ -47,7 +54,7 @@ public sealed class TopPSampling : ISamplingStrategy
     /// <param name="logits">A read-only list of logit values representing unnormalized log probabilities. Cannot be null or empty.</param>
     /// <returns>The index of the selected logit after applying nucleus sampling.</returns>
     /// <exception cref="ArgumentException">Thrown if logits is empty.</exception>
-    public int Sample(IReadOnlyList<float> logits)
+    public int Sample(IReadOnlyList<float> logits, IReadOnlyList<int> contextTokens = null)
     {
         ArgumentNullException.ThrowIfNull(logits);
 
@@ -56,8 +63,12 @@ public sealed class TopPSampling : ISamplingStrategy
             throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
+        var seen = _repetitionPenalty > 1.0f && contextTokens != null && contextTokens.Count > 0
+            ? new HashSet<int>(contextTokens)
+            : null;
+
         var sortedIndices = logits
-            .Select((logit, index) => (logit, index))
+            .Select((logit, index) => (logit: AdjustForRepetition(logit, index, seen), index))
             .OrderByDescending(item => item.logit)
             .ToArray();
 
@@ -84,6 +95,18 @@ public sealed class TopPSampling : ISamplingStrategy
         var selectedIndex = SampleFromDistribution(normalizedProbabilities);
 
         return nucleus[selectedIndex].index;
+    }
+
+    private float AdjustForRepetition(float logit, int tokenId, HashSet<int> seen)
+    {
+        if (seen == null || !seen.Contains(tokenId) || _repetitionPenalty == 1.0f)
+        {
+            return logit;
+        }
+
+        return logit < 0.0f
+            ? logit * _repetitionPenalty
+            : logit / _repetitionPenalty;
     }
 
     /// <summary>

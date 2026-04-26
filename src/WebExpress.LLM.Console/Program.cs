@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using WebExpress.LLM.Chat;
 using WebExpress.LLM.Inference;
@@ -88,14 +90,15 @@ internal class Program
                     Temperature = config.Temperature,
                     TopK = config.TopK,
                     TopP = config.TopP,
-                    Seed = config.Seed
+                    Seed = config.Seed,
+                    RepetitionPenalty = config.RepetitionPenalty
                 };
 
                 // create sampling strategy based on generation configuration
                 var samplingStrategy = generationConfig.CreateSamplingStrategy();
                 inferenceEngine = new TransformerInferenceEngine(model, samplingStrategy);
 
-                System.Console.Write($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}");
+                System.Console.Write($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}, RepPenalty={config.RepetitionPenalty}");
                 if (config.TopK.HasValue)
                 {
                     System.Console.WriteLine($", Sampling: Top-K (k={config.TopK.Value})");
@@ -128,7 +131,6 @@ internal class Program
 
         // store max tokens from configuration for use during chat
         var maxNewTokens = config.MaxNewTokens;
-
         // create a new chat session with the configured tokenizer and inference engine
         var chatSession = new ChatSession(tokenizer, inferenceEngine, model.ChatTemplate);
 
@@ -163,6 +165,10 @@ internal class Program
                 var tokenCount = 0;
                 var stopwatch = Stopwatch.StartNew();
                 var previousElapsedSeconds = 0.0;
+                var process = Process.GetCurrentProcess();
+                var previousCpuTime = process.TotalProcessorTime;
+                var previousCpuSample = stopwatch.Elapsed;
+                var previousIoOps = GetProcessIoOperationCount(process) ?? 0UL;
 
                 await foreach (var textChunk in chatSession.SendAsync(userInput, maxNewTokens: maxNewTokens))
                 {
@@ -172,10 +178,30 @@ internal class Program
                     var lastTokenSeconds = Math.Max(elapsedSeconds - previousElapsedSeconds, 0.0);
                     previousElapsedSeconds = elapsedSeconds;
 
+                    process.Refresh();
+                    var nowCpuTime = process.TotalProcessorTime;
+                    var nowSample = stopwatch.Elapsed;
+                    var wallSeconds = Math.Max((nowSample - previousCpuSample).TotalSeconds, 1e-9);
+                    var cpuPercent = Math.Clamp(
+                        (nowCpuTime - previousCpuTime).TotalSeconds / (wallSeconds * Environment.ProcessorCount) * 100.0,
+                        0.0,
+                        100.0);
+                    previousCpuTime = nowCpuTime;
+                    previousCpuSample = nowSample;
+
+                    var ramGb = process.WorkingSet64 / (1024.0 * 1024.0 * 1024.0);
+                    var ioOps = GetProcessIoOperationCount(process) ?? previousIoOps;
+                    var hddOpsPerSecond = Math.Max((ioOps - previousIoOps) / wallSeconds, 0.0);
+                    previousIoOps = ioOps;
+
                     WriteTopRightStatus(
                         $"Token/s: {tokensPerSecond:0.000000}",
-                        $"Last: {lastTokenSeconds:0.000} s");
-                    System.Console.Write(textChunk);
+                        $"Last: {lastTokenSeconds:0.000} s",
+                        $"CPU:  {cpuPercent:0.0}%",
+                        $"RAM:  {ramGb:0.00} GB",
+                        $"HDD:  {hddOpsPerSecond:0.0} ops/s");
+
+                    System.Console.Write($"{textChunk} ");
                 }
 
                 System.Console.WriteLine();
@@ -200,9 +226,14 @@ internal class Program
     /// Writes the specified status text to the top-right corner of the console window without altering 
     /// the current cursor position.
     /// </summary>
-    private static void WriteTopRightStatus(string text, string secondLine = null)
+    private static void WriteTopRightStatus(params string[] lines)
     {
         if (System.Console.IsOutputRedirected)
+        {
+            return;
+        }
+
+        if (lines == null || lines.Length == 0)
         {
             return;
         }
@@ -213,18 +244,23 @@ internal class Program
             var cursorTop = System.Console.CursorTop;
 
             var width = System.Console.WindowWidth;
-            var status1 = $"     {text}" ?? string.Empty;
-            var status2 = string.IsNullOrEmpty(secondLine) ? string.Empty : $"     {secondLine}";
-            var statusWidth = Math.Max(status1.Length, status2.Length);
+            var statusLines = lines
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => $"     {x}")
+                .ToArray();
+
+            if (statusLines.Length == 0)
+            {
+                return;
+            }
+
+            var statusWidth = statusLines.Max(x => x.Length);
             var column = Math.Max(0, width - statusWidth);
 
-            System.Console.SetCursorPosition(column, 0);
-            System.Console.Write(status1.PadRight(statusWidth));
-
-            if (!string.IsNullOrEmpty(secondLine) && System.Console.WindowHeight > 1)
+            for (var lineIndex = 0; lineIndex < statusLines.Length && lineIndex < System.Console.WindowHeight; lineIndex++)
             {
-                System.Console.SetCursorPosition(column, 1);
-                System.Console.Write(status2.PadRight(statusWidth));
+                System.Console.SetCursorPosition(column, lineIndex);
+                System.Console.Write(statusLines[lineIndex].PadRight(statusWidth));
             }
 
             System.Console.SetCursorPosition(cursorLeft, cursorTop);
@@ -235,6 +271,39 @@ internal class Program
         catch (IOException)
         {
         }
+    }
+
+    private static ulong? GetProcessIoOperationCount(Process process)
+    {
+        ArgumentNullException.ThrowIfNull(process);
+
+        try
+        {
+            if (!GetProcessIoCounters(process.Handle, out var counters))
+            {
+                return null;
+            }
+
+            return counters.ReadOperationCount + counters.WriteOperationCount;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetProcessIoCounters(IntPtr hProcess, out IoCounters lpIoCounters);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong ReadOperationCount;
+        public ulong WriteOperationCount;
+        public ulong OtherOperationCount;
+        public ulong ReadTransferCount;
+        public ulong WriteTransferCount;
+        public ulong OtherTransferCount;
     }
 
     /// <summary>

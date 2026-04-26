@@ -144,6 +144,15 @@ public sealed class ShardedSafeTensorLoader : ISafeTensorLoader, IDisposable
     }
 
     /// <summary>
+    /// Loads a single row from a 2-D tensor in the appropriate shard.
+    /// </summary>
+    public void LoadTensorRow(string name, long rowIndex, float[] destination)
+    {
+        var loader = GetShardLoader(name);
+        loader.LoadTensorRow(name, rowIndex, destination);
+    }
+
+    /// <summary>
     /// Releases all resources held by the shard loaders and their underlying weights.
     /// </summary>
     public void Dispose()

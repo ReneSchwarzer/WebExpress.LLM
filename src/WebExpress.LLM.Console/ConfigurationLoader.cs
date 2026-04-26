@@ -67,6 +67,7 @@ public sealed class ConfigurationLoader
             var topK = ParseNullableInt(inferenceElement?.Element("topK")?.Value);
             var topP = ParseNullableFloat(inferenceElement?.Element("topP")?.Value);
             var seed = ParseNullableInt(inferenceElement?.Element("seed")?.Value);
+            var repetitionPenalty = ParseFloat(inferenceElement?.Element("repetitionPenalty")?.Value, 1.1f);
 
             // Load tokenizer configuration (optional)
             var tokenizerElement = root.Element("tokenizer");
@@ -86,6 +87,7 @@ public sealed class ConfigurationLoader
                 TopK = topK,
                 TopP = topP,
                 Seed = seed,
+                RepetitionPenalty = repetitionPenalty,
                 TokenizerType = tokenizerType,
                 TokenizerModelPath = tokenizerModelPath,
                 UseDeterministicEngine = useDeterministicEngine

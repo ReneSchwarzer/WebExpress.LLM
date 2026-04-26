@@ -3,9 +3,8 @@
 	<!-- Model path: defines base path to load models -->
 	<path>../../../../../models</path>
 	<!-- Model configuration: defines which model to load -->
-	<model>google/gemma-4-26B-A4B-it</model><!---->
-	<!--<model>google/gemma-4-E2B-it</model>-->
-	<!--<model>google/gemma-4-E2B</model>-->
+	<!--<model>google/gemma-4-26B-A4B-it</model>-->
+	<model>google/gemma-4-E2B-it</model><!---->
 
 	<!-- Inference configuration: controls text generation behavior -->
 	<inference>
@@ -23,6 +22,9 @@
 
 		<!-- Seed for deterministic random generation (uncomment to enable) -->
 		<!-- <seed>42</seed> -->
+		
+        <!-- Repetition penalty: reduces repeated token loops (1.0 = disabled, >1.0 = stronger penalty) -->
+		<repetitionPenalty>1.1</repetitionPenalty>
 	</inference>
 
 	<!-- Tokenizer configuration: defines how text is converted to tokens -->

@@ -11,6 +11,7 @@ public sealed class TopKSampling : ISamplingStrategy
 {
     private readonly int _k;
     private readonly Random _random;
+    private readonly float _repetitionPenalty;
 
     /// <summary>
     /// Initializes a new instance of the TopKSampling class with the specified number of elements  
@@ -26,15 +27,21 @@ public sealed class TopKSampling : ISamplingStrategy
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when <paramref name="k"/> is less than or equal to zero.
     /// </exception>
-    public TopKSampling(int k, int? seed = null)
+    public TopKSampling(int k, int? seed = null, float repetitionPenalty = 1.0f)
     {
         if (k <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(k), "k must be greater than zero.");
         }
 
+        if (repetitionPenalty <= 0.0f)
+        {
+            throw new ArgumentOutOfRangeException(nameof(repetitionPenalty), "Repetition penalty must be greater than zero.");
+        }
+
         _k = k;
         _random = seed.HasValue ? new Random(seed.Value) : new Random();
+        _repetitionPenalty = repetitionPenalty;
     }
 
     /// <summary>
@@ -47,7 +54,7 @@ public sealed class TopKSampling : ISamplingStrategy
     /// <returns>The index of the selected logit after applying top-k filtering and sampling from the resulting probability
     /// distribution.</returns>
     /// <exception cref="ArgumentException">Thrown if logits is empty.</exception>
-    public int Sample(IReadOnlyList<float> logits)
+    public int Sample(IReadOnlyList<float> logits, IReadOnlyList<int> contextTokens = null)
     {
         ArgumentNullException.ThrowIfNull(logits);
 
@@ -56,14 +63,30 @@ public sealed class TopKSampling : ISamplingStrategy
             throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
+        var seen = _repetitionPenalty > 1.0f && contextTokens != null && contextTokens.Count > 0
+            ? new HashSet<int>(contextTokens)
+            : null;
+
         var topK = logits
-            .Select((logit, index) => (logit, index))
+            .Select((logit, index) => (logit: AdjustForRepetition(logit, index, seen), index))
             .OrderByDescending(item => item.logit)
             .Take(Math.Min(_k, logits.Count))
             .ToArray();
 
         var probabilities = Softmax(topK.Select(item => item.logit).ToArray());
         return topK[SampleFromDistribution(probabilities)].index;
+    }
+
+    private float AdjustForRepetition(float logit, int tokenId, HashSet<int> seen)
+    {
+        if (seen == null || !seen.Contains(tokenId) || _repetitionPenalty == 1.0f)
+        {
+            return logit;
+        }
+
+        return logit < 0.0f
+            ? logit * _repetitionPenalty
+            : logit / _repetitionPenalty;
     }
 
     /// <summary>

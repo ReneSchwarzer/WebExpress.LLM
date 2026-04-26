@@ -11,6 +11,7 @@ public interface ISamplingStrategy
     /// Samples the next token ID from the given logits.
     /// </summary>
     /// <param name="logits">The raw logits (unnormalized log probabilities) for each token in the vocabulary.</param>
+    /// <param name="contextTokens">Optional context tokens generated/seen so far for repetition-aware sampling.</param>
     /// <returns>The selected token ID.</returns>
-    int Sample(IReadOnlyList<float> logits);
+    int Sample(IReadOnlyList<float> logits, IReadOnlyList<int> contextTokens = null);
 }

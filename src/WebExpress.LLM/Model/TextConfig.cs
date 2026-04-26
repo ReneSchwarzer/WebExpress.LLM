@@ -190,24 +190,28 @@ public sealed class TextConfig
     /// Gets the total number of expert networks per MoE block.
     /// </summary>
     [JsonPropertyName("num_experts")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int NumberOfExperts { get; init; }
 
     /// <summary>
     /// Gets the number of experts selected per token by the MoE router (top-k).
     /// </summary>
     [JsonPropertyName("top_k_experts")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int TopKExperts { get; init; }
 
     /// <summary>
     /// Gets the per-expert feed-forward intermediate size used in MoE blocks.
     /// </summary>
     [JsonPropertyName("moe_intermediate_size")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int MoeIntermediateSize { get; init; }
 
     /// <summary>
     /// Gets the number of key-value attention heads used in full (global) attention layers.
     /// </summary>
     [JsonPropertyName("num_global_key_value_heads")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int NumberOfGlobalKeyValueHeads { get; init; }
 
     /// <summary>
@@ -220,6 +224,7 @@ public sealed class TextConfig
     /// Gets the number of layers that share the same key-value cache.
     /// </summary>
     [JsonPropertyName("num_kv_shared_layers")]
+    [JsonConverter(typeof(IntOrArrayConverter))]
     public int NumberOfKvSharedLayers { get; init; }
 
     /// <summary>
@@ -228,5 +233,5 @@ public sealed class TextConfig
     /// and unused by the text-only inference path.
     /// </summary>
     [JsonPropertyName("use_bidirectional_attention")]
-    public string UseBidirectionalAttention { get; init; } = string.Empty;
+    public string UseBidirectionalAttention { get; init; }
 }

@@ -44,6 +44,11 @@ public sealed class ApplicationConfiguration
     public int? Seed { get; init; }
 
     /// <summary>
+    /// Gets the repetition penalty factor used to reduce repeated token loops.
+    /// </summary>
+    public float RepetitionPenalty { get; init; } = 1.1f;
+
+    /// <summary>
     /// Gets the tokenizer type to use (e.g., "byte", "sentencepiece").
     /// </summary>
     public string TokenizerType { get; init; } = "byte";

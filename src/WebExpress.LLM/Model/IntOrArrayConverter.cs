@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -35,9 +36,25 @@ internal sealed class IntOrArrayConverter : JsonConverter<int>
     /// </exception>
     public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return 0;
+        }
+
         if (reader.TokenType == JsonTokenType.Number)
         {
             return reader.GetInt32();
+        }
+
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var s = reader.GetString();
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+
+            throw new JsonException($"String value '{s}' is not a valid integer.");
         }
 
         if (reader.TokenType == JsonTokenType.StartArray)
@@ -47,9 +64,33 @@ internal sealed class IntOrArrayConverter : JsonConverter<int>
                 throw new JsonException("The 'eos_token_id' array must contain at least one integer element.");
             }
 
+            if (reader.TokenType == JsonTokenType.Null)
+            {
+                // Consume any remaining elements.
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                }
+
+                return 0;
+            }
+
             if (reader.TokenType != JsonTokenType.Number)
             {
-                throw new JsonException($"The first element of the 'eos_token_id' array must be an integer, but got {reader.TokenType}.");
+                if (reader.TokenType == JsonTokenType.String)
+                {
+                    var s = reader.GetString();
+                    if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+                    {
+                        // Consume any remaining elements.
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                        {
+                        }
+
+                        return parsed;
+                    }
+                }
+
+                throw new JsonException($"The first element of the integer-array value must be an integer, but got {reader.TokenType}.");
             }
 
             var result = reader.GetInt32();

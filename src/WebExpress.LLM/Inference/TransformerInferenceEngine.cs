@@ -93,7 +93,7 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
         for (var i = 0; i < maxNewTokens; i++)
         {
             var logits = ForwardPass(contextTokens);
-            var nextToken = _samplingStrategy.Sample(logits);
+            var nextToken = _samplingStrategy.Sample(logits, contextTokens);
 
             generatedTokens.Add(nextToken);
             contextTokens.Add(nextToken);
@@ -148,7 +148,7 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             await Task.Yield();
 
             var logits = ForwardPass(contextTokens);
-            var nextToken = _samplingStrategy.Sample(logits);
+            var nextToken = _samplingStrategy.Sample(logits, contextTokens);
 
             yield return nextToken;
 

@@ -111,16 +111,16 @@ public sealed class Gemma4Model
                                          is int v && v > 0
                 ? v
                 : _config.VocabularySize;
-            var embedTokensPerLayer = _loader.LoadTensor(
-                "model.language_model.embed_tokens_per_layer.weight");
             var perLayerProjection = _loader.LoadTensor(
                 "model.language_model.per_layer_model_projection.weight");
             var perLayerProjectionNorm = _loader.LoadTensor(
                 "model.language_model.per_layer_projection_norm.weight");
 
-            perLayerInputs = PerLayerEmbedding.BuildPerLayerInputs(
+            perLayerInputs = PerLayerEmbedding.BuildPerLayerInputsFromLoader(
                 hidden, tokenIds,
-                embedTokensPerLayer, perLayerProjection, perLayerProjectionNorm,
+                _loader,
+                "model.language_model.embed_tokens_per_layer.weight",
+                perLayerProjection, perLayerProjectionNorm,
                 hiddenSize, numLayers, hiddenSizePerLayerInput,
                 vocabSizePerLayerInput, rmsEps);
         }

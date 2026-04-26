@@ -406,14 +406,20 @@ public sealed class Tensor
     /// </returns>
     private static int ComputeLength(int[] shape)
     {
-        var length = 1;
+        var length = 1L;
 
         for (var i = 0; i < shape.Length; i++)
         {
             length *= shape[i];
+
+            if (length > int.MaxValue)
+            {
+                throw new ArgumentException(
+                    $"Shape {string.Join("x", shape)} has {length} elements, exceeding Int32.MaxValue.");
+            }
         }
 
-        return length;
+        return (int)length;
     }
 
     /// <summary>

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
 
@@ -121,19 +120,12 @@ public sealed class ChatSession
         yield return $"chat template: '{prompt}'\n";
         yield return $"prompt tokens: '[{string.Join(",", promptTokens)}]'\n";
 
-        var responseBuilder = new StringBuilder();
-        var responseTokens = new List<int>();
-
         await foreach (var token in _inferenceEngine.GenerateTokensAsync(promptTokens, maxNewTokens))
         {
-            responseTokens.Add(token);
             var decodedText = _tokenizer.Decode([token]);
-            responseBuilder.Append(decodedText);
-            yield return decodedText.Trim() + " ";
-        }
 
-        var assistant = new ChatMessage("assistant", responseBuilder.ToString());
-        _messages.Add(assistant);
+            yield return decodedText.Trim();
+        }
     }
 
     /// <summary>

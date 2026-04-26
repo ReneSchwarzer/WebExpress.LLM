@@ -130,7 +130,22 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         var meta = GetMetadata(name);
         var begin = meta.DataOffsets[0];
         var end = meta.DataOffsets[1];
-        var byteCount = (int)(end - begin);
+        var rawByteCount = end - begin;
+
+        if (rawByteCount < 0)
+        {
+            throw new InvalidDataException(
+                $"Tensor '{name}' has invalid data offsets: begin={begin}, end={end}.");
+        }
+
+        if (rawByteCount > int.MaxValue)
+        {
+            throw new NotSupportedException(
+                $"Tensor '{name}' is too large to load as a contiguous byte array ({rawByteCount} bytes). " +
+                "This model tensor exceeds the current loader limits.");
+        }
+
+        var byteCount = (int)rawByteCount;
         var rawBytes = _weights.ReadBytes(_dataOffset + begin - _baseOffset, byteCount);
 
         var floats = ConvertToFloat32(rawBytes, meta.Dtype);
@@ -148,6 +163,58 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
         //System.Console.WriteLine($"Loaded tensor '{name}' with shape [{string.Join(", ", shape)}] and dtype {meta.Dtype}.");
 
         return tensor;
+    }
+
+    /// <summary>
+    /// Loads a single row from a 2-D tensor directly into the destination buffer.
+    /// </summary>
+    public void LoadTensorRow(string name, long rowIndex, float[] destination)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        var meta = GetMetadata(name);
+
+        if (meta.Shape.Count != 2)
+        {
+            throw new InvalidOperationException($"Tensor '{name}' is not 2-D.");
+        }
+
+        var rows = meta.Shape[0];
+        var cols = meta.Shape[1];
+
+        if (rowIndex < 0 || rowIndex >= rows)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rowIndex));
+        }
+
+        if (destination.Length < cols)
+        {
+            throw new ArgumentException(
+                $"Destination length {destination.Length} is smaller than row width {cols}.",
+                nameof(destination));
+        }
+
+        var bytesPerElement = meta.Dtype switch
+        {
+            "F32" => 4,
+            "F16" => 2,
+            "BF16" => 2,
+            _ => throw new NotSupportedException($"Conversion from {meta.Dtype} to float32 is not supported.")
+        };
+
+        var rowByteWidth = checked(cols * bytesPerElement);
+        var begin = meta.DataOffsets[0];
+        var rowBegin = checked(begin + rowIndex * rowByteWidth);
+
+        if (rowByteWidth > int.MaxValue)
+        {
+            throw new NotSupportedException(
+                $"Row byte width {rowByteWidth} exceeds current loader limits.");
+        }
+
+        var rawBytes = _weights.ReadBytes(_dataOffset + rowBegin - _baseOffset, (int)rowByteWidth);
+        var rowValues = ConvertToFloat32(rawBytes, meta.Dtype);
+        Array.Copy(rowValues, 0, destination, 0, (int)cols);
     }
 
     /// <summary>
