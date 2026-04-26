@@ -4,6 +4,7 @@
 	<path>../../../../../models</path>
 	<!-- Model configuration: defines which model to load -->
 	<!--<model>google/gemma-4-26B-A4B-it</model>-->
+	<!--<model>google/gemma-4-E4B-it</model>-->
 	<model>google/gemma-4-E2B-it</model><!---->
 
 	<!-- Inference configuration: controls text generation behavior -->
