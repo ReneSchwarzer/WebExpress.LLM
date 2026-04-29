@@ -187,6 +187,13 @@ public sealed class TextConfig
     public bool EnableMoeBlock { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether the secondary MLP/MoE block wiring is enabled.
+    /// Some Gemma-4 configs use this key instead of <c>enable_moe_block</c>.
+    /// </summary>
+    [JsonPropertyName("use_second_mlp_block")]
+    public bool UseSecondMlpBlock { get; init; }
+
+    /// <summary>
     /// Gets the total number of expert networks per MoE block.
     /// </summary>
     [JsonPropertyName("num_experts")]

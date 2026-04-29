@@ -239,7 +239,9 @@ public sealed class Gemma4Model
 
         // Full-attention layers may use a different number of KV heads
         // (e.g. gemma-4 26B_A4B: 8 sliding KV heads vs 2 global KV heads).
-        var effectiveKvHeads = isFullAttention && _config.TextConfig?.NumberOfGlobalKeyValueHeads > 0
+        var keyEqualsValue =
+            (_config.TextConfig?.AttentionKeyEqualsValue ?? false) && isFullAttention;
+        var effectiveKvHeads = keyEqualsValue && _config.TextConfig?.NumberOfGlobalKeyValueHeads > 0
             ? _config.TextConfig.NumberOfGlobalKeyValueHeads
             : numKvHeads;
 
@@ -288,8 +290,6 @@ public sealed class Gemma4Model
             // exists in the model files. Sliding-attention layers always have a real
             // v_proj.weight even when attention_k_eq_v is enabled (matches vLLM
             // gemma4.py:567-569).
-            var keyEqualsValue =
-                (_config.TextConfig?.AttentionKeyEqualsValue ?? false) && isFullAttention;
             vWeight = keyEqualsValue
                 ? kWeight
                 : _loader.LoadTensor($"{prefix}.self_attn.v_proj.weight");
@@ -324,7 +324,8 @@ public sealed class Gemma4Model
         var attnResidual = attnOutput + hidden;
 
         // 5. Feed-forward stage on attnResidual.
-        var enableMoe = _config.TextConfig?.EnableMoeBlock ?? false;
+        var enableMoe = (_config.TextConfig?.EnableMoeBlock ?? false)
+                        || (_config.TextConfig?.UseSecondMlpBlock ?? false);
         Tensor.Tensor ffOutput;
 
         if (enableMoe)
