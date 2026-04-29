@@ -94,7 +94,7 @@ public static class TensorOperations
         var lastDim = input.Shape[^1];
         var outerSize = data.Length / lastDim;
 
-        for (var outer = 0; outer < outerSize; outer++)
+        Parallel.For(0, outerSize, outer =>
         {
             var offset = outer * lastDim;
 
@@ -126,7 +126,7 @@ public static class TensorOperations
                     result[offset + i] /= sum;
                 }
             }
-        }
+        });
 
         return new Tensor(ToIntArray(input.Shape), result);
     }
@@ -153,7 +153,7 @@ public static class TensorOperations
         var lastDim = input.Shape[^1];
         var outerSize = data.Length / lastDim;
 
-        for (int outer = 0; outer < outerSize; outer++)
+        Parallel.For(0, outerSize, outer =>
         {
             int offset = outer * lastDim;
 
@@ -186,7 +186,7 @@ public static class TensorOperations
             {
                 result[offset + i] *= inv;
             }
-        }
+        });
 
         return new Tensor(ToIntArray(input.Shape), result);
     }
@@ -410,7 +410,7 @@ public static class TensorOperations
             trailingSize *= newShape[i];
         }
 
-        for (var outer = 0; outer < outerSize; outer++)
+        Parallel.For(0, outerSize, outer =>
         {
             var aStart = outer * aInnerSize * trailingSize;
             var bStart = outer * bInnerSize * trailingSize;
@@ -418,7 +418,7 @@ public static class TensorOperations
 
             Array.Copy(a.Data, aStart, result.Data, rStart, aInnerSize * trailingSize);
             Array.Copy(b.Data, bStart, result.Data, rStart + aInnerSize * trailingSize, bInnerSize * trailingSize);
-        }
+        });
 
         return result;
     }
@@ -432,13 +432,13 @@ public static class TensorOperations
     {
         var data = new float[seqLen * seqLen];
 
-        for (var i = 0; i < seqLen; i++)
+        Parallel.For(0, seqLen, i =>
         {
             for (var j = 0; j < seqLen; j++)
             {
                 data[i * seqLen + j] = j <= i ? 0.0f : float.NegativeInfinity;
             }
-        }
+        });
 
         return new Tensor([seqLen, seqLen], data);
     }
@@ -454,7 +454,7 @@ public static class TensorOperations
     {
         var data = new float[seqLen * seqLen];
 
-        for (var i = 0; i < seqLen; i++)
+        Parallel.For(0, seqLen, i =>
         {
             for (var j = 0; j < seqLen; j++)
             {
@@ -463,7 +463,7 @@ public static class TensorOperations
                 var isInWindow = j >= i - windowSize + 1;
                 data[i * seqLen + j] = isCausal && isInWindow ? 0.0f : float.NegativeInfinity;
             }
-        }
+        });
 
         return new Tensor([seqLen, seqLen], data);
     }
