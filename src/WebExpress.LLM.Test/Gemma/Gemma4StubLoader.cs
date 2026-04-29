@@ -203,7 +203,7 @@ internal sealed class Gemma4StubLoader : ISafeTensorLoader
         var isFullAttention = layerIndex < LayerTypes.Count
             && LayerTypes[layerIndex] == "full_attention";
         var effectiveHeadDim = isFullAttention ? GlobalHeadDim : HeadDim;
-        var effectiveKvHeads = isFullAttention && AttentionKeyEqualsValue
+        var effectiveKvHeads = isFullAttention && AttentionKeyEqualsValue && NumGlobalKvHeads > 0
             ? NumGlobalKvHeads
             : NumKvHeads;
 
