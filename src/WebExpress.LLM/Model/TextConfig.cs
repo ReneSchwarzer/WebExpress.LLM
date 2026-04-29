@@ -188,7 +188,7 @@ public sealed class TextConfig
 
     /// <summary>
     /// Gets a value indicating whether the secondary MLP/MoE block wiring is enabled.
-    /// Some Gemma-4 configs use this key instead of <c>enable_moe_block</c>.
+    /// Some Gemma-4 configs use this key as an additional MoE-enabling flag.
     /// </summary>
     [JsonPropertyName("use_second_mlp_block")]
     public bool UseSecondMlpBlock { get; init; }
