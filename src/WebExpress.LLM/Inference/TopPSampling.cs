@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace WebExpress.LLM.Inference;
 
@@ -67,12 +66,25 @@ public sealed class TopPSampling : ISamplingStrategy
             ? new HashSet<int>(contextTokens)
             : null;
 
-        var sortedIndices = logits
-            .Select((logit, index) => (logit: AdjustForRepetition(logit, index, seen), index))
-            .OrderByDescending(item => item.logit)
-            .ToArray();
+        var sortedIndices = new (float logit, int index)[logits.Count];
+        for (var i = 0; i < logits.Count; i++)
+        {
+            sortedIndices[i] = (AdjustForRepetition(logits[i], i, seen), i);
+        }
 
-        var probabilities = Softmax(sortedIndices.Select(item => item.logit).ToArray());
+        Array.Sort(sortedIndices, static (left, right) =>
+        {
+            var byLogit = right.logit.CompareTo(left.logit);
+            return byLogit != 0 ? byLogit : left.index.CompareTo(right.index);
+        });
+
+        var sortedLogits = new float[sortedIndices.Length];
+        for (var i = 0; i < sortedIndices.Length; i++)
+        {
+            sortedLogits[i] = sortedIndices[i].logit;
+        }
+
+        var probabilities = Softmax(sortedLogits);
 
         var cumulativeProbability = 0.0f;
         var nucleusSize = 0;
@@ -88,13 +100,13 @@ public sealed class TopPSampling : ISamplingStrategy
             }
         }
 
-        var nucleus = sortedIndices.Take(nucleusSize).ToArray();
-        var nucleusProbabilities = probabilities.Take(nucleusSize).ToArray();
+        var nucleusProbabilities = new float[nucleusSize];
+        Array.Copy(probabilities, nucleusProbabilities, nucleusSize);
 
         var normalizedProbabilities = NormalizeProbabilities(nucleusProbabilities);
         var selectedIndex = SampleFromDistribution(normalizedProbabilities);
 
-        return nucleus[selectedIndex].index;
+        return sortedIndices[selectedIndex].index;
     }
 
     private float AdjustForRepetition(float logit, int tokenId, HashSet<int> seen)
@@ -126,9 +138,30 @@ public sealed class TopPSampling : ISamplingStrategy
     /// </returns>
     private static float[] Softmax(float[] logits)
     {
-        var maxLogit = logits.Max();
-        var expSum = logits.Sum(logit => MathF.Exp(logit - maxLogit));
-        return logits.Select(logit => MathF.Exp(logit - maxLogit) / expSum).ToArray();
+        var maxLogit = float.NegativeInfinity;
+        for (var i = 0; i < logits.Length; i++)
+        {
+            if (logits[i] > maxLogit)
+            {
+                maxLogit = logits[i];
+            }
+        }
+
+        var expSum = 0.0f;
+        var probabilities = new float[logits.Length];
+        for (var i = 0; i < logits.Length; i++)
+        {
+            var exp = MathF.Exp(logits[i] - maxLogit);
+            probabilities[i] = exp;
+            expSum += exp;
+        }
+
+        for (var i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] /= expSum;
+        }
+
+        return probabilities;
     }
 
     /// <summary>
@@ -149,8 +182,19 @@ public sealed class TopPSampling : ISamplingStrategy
     /// </returns>
     private static float[] NormalizeProbabilities(float[] probabilities)
     {
-        var sum = probabilities.Sum();
-        return probabilities.Select(p => p / sum).ToArray();
+        var sum = 0.0f;
+        for (var i = 0; i < probabilities.Length; i++)
+        {
+            sum += probabilities[i];
+        }
+
+        var normalized = new float[probabilities.Length];
+        for (var i = 0; i < probabilities.Length; i++)
+        {
+            normalized[i] = probabilities[i] / sum;
+        }
+
+        return normalized;
     }
 
     /// <summary>

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace WebExpress.LLM.Inference;
 
@@ -67,14 +66,29 @@ public sealed class TopKSampling : ISamplingStrategy
             ? new HashSet<int>(contextTokens)
             : null;
 
-        var topK = logits
-            .Select((logit, index) => (logit: AdjustForRepetition(logit, index, seen), index))
-            .OrderByDescending(item => item.logit)
-            .Take(Math.Min(_k, logits.Count))
-            .ToArray();
+        var scored = new (float logit, int index)[logits.Count];
+        for (var i = 0; i < logits.Count; i++)
+        {
+            scored[i] = (AdjustForRepetition(logits[i], i, seen), i);
+        }
 
-        var probabilities = Softmax(topK.Select(item => item.logit).ToArray());
-        return topK[SampleFromDistribution(probabilities)].index;
+        Array.Sort(scored, static (left, right) =>
+        {
+            var byLogit = right.logit.CompareTo(left.logit);
+            return byLogit != 0 ? byLogit : left.index.CompareTo(right.index);
+        });
+
+        var topCount = Math.Min(_k, scored.Length);
+        var topLogits = new float[topCount];
+        var topIndices = new int[topCount];
+        for (var i = 0; i < topCount; i++)
+        {
+            topLogits[i] = scored[i].logit;
+            topIndices[i] = scored[i].index;
+        }
+
+        var probabilities = Softmax(topLogits);
+        return topIndices[SampleFromDistribution(probabilities)];
     }
 
     private float AdjustForRepetition(float logit, int tokenId, HashSet<int> seen)
@@ -105,9 +119,30 @@ public sealed class TopKSampling : ISamplingStrategy
     /// </returns>
     private static float[] Softmax(float[] logits)
     {
-        var maxLogit = logits.Max();
-        var expSum = logits.Sum(logit => MathF.Exp(logit - maxLogit));
-        return logits.Select(logit => MathF.Exp(logit - maxLogit) / expSum).ToArray();
+        var maxLogit = float.NegativeInfinity;
+        for (var i = 0; i < logits.Length; i++)
+        {
+            if (logits[i] > maxLogit)
+            {
+                maxLogit = logits[i];
+            }
+        }
+
+        var expSum = 0.0f;
+        var probabilities = new float[logits.Length];
+        for (var i = 0; i < logits.Length; i++)
+        {
+            var exp = MathF.Exp(logits[i] - maxLogit);
+            probabilities[i] = exp;
+            expSum += exp;
+        }
+
+        for (var i = 0; i < probabilities.Length; i++)
+        {
+            probabilities[i] /= expSum;
+        }
+
+        return probabilities;
     }
 
     /// <summary>

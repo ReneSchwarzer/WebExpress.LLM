@@ -203,7 +203,9 @@ internal sealed class Gemma4StubLoader : ISafeTensorLoader
         var isFullAttention = layerIndex < LayerTypes.Count
             && LayerTypes[layerIndex] == "full_attention";
         var effectiveHeadDim = isFullAttention ? GlobalHeadDim : HeadDim;
-        var effectiveKvHeads = isFullAttention ? NumGlobalKvHeads : NumKvHeads;
+        var effectiveKvHeads = isFullAttention && AttentionKeyEqualsValue && NumGlobalKvHeads > 0
+            ? NumGlobalKvHeads
+            : NumKvHeads;
 
         // For k_eq_v full-attention layers, v_proj does not exist in the
         // checkpoint — match vLLM behaviour.
