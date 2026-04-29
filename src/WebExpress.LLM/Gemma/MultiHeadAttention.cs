@@ -107,10 +107,6 @@ public sealed class MultiHeadAttention
         var seqLen = input.Shape[0];
         var hiddenSize = input.Shape[1];
 
-        //System.Console.WriteLine($"MultiHeadAttention.Forward: seqLen={seqLen}, hiddenSize={hiddenSize}, " +
-        //    $"numQueryHeads={_numQueryHeads}, numKvHeads={_numKvHeads}, headDim={_headDim}, " +
-        //    $"isFullAttention={_isFullAttention}, slidingWindowSize={_slidingWindowSize}");
-
         // Project to Q always; K/V only when not KV-shared.
         var qProj = TensorOperations.MatMul(input, Transpose2D(qProjWeight));
 

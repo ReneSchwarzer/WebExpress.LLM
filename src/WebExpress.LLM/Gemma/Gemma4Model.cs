@@ -78,8 +78,6 @@ public sealed class Gemma4Model
     /// <returns>An array of logit values, one per vocabulary entry.</returns>
     public float[] Forward(int[] tokenIds)
     {
-        //System.Console.WriteLine($"Gemma4Model.Forward");
-
         ArgumentNullException.ThrowIfNull(tokenIds);
 
         if (tokenIds.Length == 0)
