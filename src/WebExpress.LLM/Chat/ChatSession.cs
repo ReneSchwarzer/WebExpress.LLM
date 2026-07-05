@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using WebExpress.LLM.Inference;
 using WebExpress.LLM.Tokenization;
 
@@ -15,6 +16,8 @@ public sealed class ChatSession
     private readonly ITokenizer _tokenizer;
     private readonly IInferenceEngine _inferenceEngine;
     private readonly ChatTemplate _chatTemplate;
+    private readonly IReadOnlyList<ToolDefinition> _tools;
+    private readonly bool _enableThinking;
     private readonly List<ChatMessage> _messages = [];
 
     /// <summary>
@@ -39,14 +42,39 @@ public sealed class ChatSession
     /// model-specific prompt strings. When <see langword="null"/>, a simple
     /// <c>role: content</c> format is used.
     /// </param>
+    /// <param name="tools">
+    /// Optional tool/function declarations advertised to the model in the leading system turn.
+    /// Only applied when <paramref name="chatTemplate"/> is provided.
+    /// </param>
+    /// <param name="enableThinking">
+    /// Whether to activate the model's thinking mode by injecting the <c>&lt;|think|&gt;</c> marker
+    /// into the leading system turn. Only applied when <paramref name="chatTemplate"/> is provided.
+    /// </param>
+    /// <param name="systemInstruction">
+    /// An optional system instruction that seeds the conversation as the first message. When null,
+    /// empty, or white-space, no system message is added.
+    /// </param>
     /// <exception cref="ArgumentNullException">
     /// Thrown when <paramref name="tokenizer"/> or <paramref name="inferenceEngine"/> is null.
     /// </exception>
-    public ChatSession(ITokenizer tokenizer, IInferenceEngine inferenceEngine, ChatTemplate chatTemplate = null)
+    public ChatSession(
+        ITokenizer tokenizer,
+        IInferenceEngine inferenceEngine,
+        ChatTemplate chatTemplate = null,
+        IReadOnlyList<ToolDefinition> tools = null,
+        bool enableThinking = false,
+        string systemInstruction = null)
     {
         _tokenizer = tokenizer ?? throw new ArgumentNullException(nameof(tokenizer));
         _inferenceEngine = inferenceEngine ?? throw new ArgumentNullException(nameof(inferenceEngine));
         _chatTemplate = chatTemplate;
+        _tools = tools;
+        _enableThinking = enableThinking;
+
+        if (!string.IsNullOrWhiteSpace(systemInstruction))
+        {
+            _messages.Add(new ChatMessage("system", systemInstruction));
+        }
     }
 
     /// <summary>
@@ -116,16 +144,18 @@ public sealed class ChatSession
         var prompt = FormatPrompt();
         var promptTokens = _tokenizer.Encode(prompt);
 
-        yield return "\n";
-        yield return $"chat template: '{prompt}'\n";
-        yield return $"prompt tokens: '[{string.Join(",", promptTokens)}]'\n";
+        var responseTokens = new List<int>();
 
         await foreach (var token in _inferenceEngine.GenerateTokensAsync(promptTokens, maxNewTokens))
         {
+            responseTokens.Add(token);
             var decodedText = _tokenizer.Decode([token]);
-
-            yield return decodedText.Trim();
+            yield return decodedText;
         }
+
+        var responseText = _tokenizer.Decode(responseTokens);
+        var assistant = new ChatMessage("assistant", responseText);
+        _messages.Add(assistant);
     }
 
     /// <summary>
@@ -143,7 +173,7 @@ public sealed class ChatSession
     {
         if (_chatTemplate != null)
         {
-            return _chatTemplate.ApplyTemplate(_messages, addGenerationPrompt: true);
+            return _chatTemplate.ApplyTemplate(_messages, addGenerationPrompt: true, tools: _tools, enableThinking: _enableThinking);
         }
 
         return string.Join('\n', _messages.Select(static message => $"{message.Role}: {message.Content}"));

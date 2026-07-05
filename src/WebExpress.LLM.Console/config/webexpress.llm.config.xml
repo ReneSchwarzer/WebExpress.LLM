@@ -13,10 +13,10 @@
 		<maxNewTokens>100</maxNewTokens>
 
 		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
-		<temperature>1.0</temperature>
+		<temperature>0.8</temperature>
 
 		<!-- Top-K sampling: sample from top K tokens (uncomment to enable) -->
-		<!--<topK>64</topK>-->
+		<topK>40</topK>
 
 		<!-- Top-P (nucleus) sampling: sample from tokens with cumulative probability P (uncomment to enable) -->
 		<topP>0.95</topP>
@@ -25,7 +25,7 @@
 		<!-- <seed>42</seed> -->
 		
         <!-- Repetition penalty: reduces repeated token loops (1.0 = disabled, >1.0 = stronger penalty) -->
-		<repetitionPenalty>1.1</repetitionPenalty>
+		<repetitionPenalty>1.0</repetitionPenalty>
 	</inference>
 
 	<!-- Tokenizer configuration: defines how text is converted to tokens -->

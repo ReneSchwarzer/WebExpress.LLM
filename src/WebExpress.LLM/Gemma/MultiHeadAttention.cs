@@ -140,7 +140,7 @@ public sealed class MultiHeadAttention
             Q = TensorOperations.RmsNorm(Q, qNormWeight, rmsNormEpsilon);
         }
 
-        var startPosition = kvCache?.GetSequenceLength(layerIndex) ?? 0;
+        var startPosition = kvCache?.GetSequenceLength(kvSharingTargetLayer ?? layerIndex) ?? 0;
         Q = _rope.Apply(Q, startPosition);
 
         Tensor.Tensor K;

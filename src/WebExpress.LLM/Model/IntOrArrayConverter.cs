@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -117,5 +118,88 @@ internal sealed class IntOrArrayConverter : JsonConverter<int>
     public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
     {
         writer.WriteNumberValue(value);
+    }
+}
+
+/// <summary>
+/// A JSON converter that deserializes a property that may be either a single integer
+/// or a JSON array of integers into an IReadOnlyList of integers.
+/// </summary>
+internal sealed class IntListOrArrayConverter : JsonConverter<IReadOnlyList<int>>
+{
+    public override IReadOnlyList<int> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return Array.Empty<int>();
+        }
+
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            return new[] { reader.GetInt32() };
+        }
+
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var s = reader.GetString();
+            if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+            {
+                return new[] { value };
+            }
+
+            throw new JsonException($"String value '{s}' is not a valid integer.");
+        }
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            var list = new List<int>();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                if (reader.TokenType == JsonTokenType.Null)
+                {
+                    continue;
+                }
+
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    list.Add(reader.GetInt32());
+                }
+                else if (reader.TokenType == JsonTokenType.String)
+                {
+                    var s = reader.GetString();
+                    if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+                    {
+                        list.Add(value);
+                    }
+                    else
+                    {
+                        throw new JsonException($"String value '{s}' in array is not a valid integer.");
+                    }
+                }
+                else
+                {
+                    throw new JsonException($"Unexpected token type {reader.TokenType} in integer array.");
+                }
+            }
+            return list;
+        }
+
+        throw new JsonException($"Unexpected token type {reader.TokenType} for an integer or integer-array value.");
+    }
+
+    public override void Write(Utf8JsonWriter writer, IReadOnlyList<int> value, JsonSerializerOptions options)
+    {
+        if (value == null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStartArray();
+        foreach (var item in value)
+        {
+            writer.WriteNumberValue(item);
+        }
+        writer.WriteEndArray();
     }
 }

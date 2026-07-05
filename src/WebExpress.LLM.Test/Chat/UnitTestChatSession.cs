@@ -103,6 +103,56 @@ public sealed class UnitTestChatSession
         Assert.NotNull(session);
     }
 
+    /// <summary>
+    /// Tests that SendAsync correctly tracks conversation history and preserves whitespace.
+    /// </summary>
+    [Fact]
+    public async Task SendAsync_ShouldTrackConversationAndPreserveWhitespace()
+    {
+        var tokenizer = new WhitespaceTokenizer();
+        var inference = new MockInferenceEngine();
+        var session = new ChatSession(tokenizer, inference);
+
+        var result = new List<string>();
+        await foreach (var token in session.SendAsync("Hello", maxNewTokens: 3))
+        {
+            result.Add(token);
+        }
+
+        // Verify streamed content
+        Assert.Equal(3, result.Count);
+        Assert.Equal(" A", result[0]);
+        Assert.Equal(" B", result[1]);
+        Assert.Equal(" C", result[2]);
+
+        // Verify conversation history
+        Assert.Collection(
+            session.Messages,
+            message =>
+            {
+                Assert.Equal("user", message.Role);
+                Assert.Equal("Hello", message.Content);
+            },
+            message =>
+            {
+                Assert.Equal("assistant", message.Role);
+                Assert.Equal(" ABC", message.Content);
+            });
+    }
+
+    private sealed class WhitespaceTokenizer : ITokenizer
+    {
+        public IReadOnlyList<int> Encode(string text) => text.Select(static c => (int)c).ToArray();
+        public string Decode(IEnumerable<int> tokens) 
+        {
+            var tokenList = tokens.ToList();
+            if (tokenList.Count == 1)
+            {
+                return " " + (char)tokenList[0];
+            }
+            return " " + string.Concat(tokenList.Select(static t => (char)t));
+        }
+    }
     private sealed class MockTokenizer : ITokenizer
     {
         public IReadOnlyList<int> Encode(string text) => text.Select(static character => (int)character).ToArray();

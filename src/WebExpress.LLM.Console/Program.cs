@@ -99,13 +99,21 @@ internal class Program
                 inferenceEngine = new TransformerInferenceEngine(model, samplingStrategy);
 
                 System.Console.Write($"Inference settings: MaxTokens={config.MaxNewTokens}, Temperature={config.Temperature}, RepPenalty={config.RepetitionPenalty}");
-                if (config.TopK.HasValue)
+                if (config.TopK.HasValue && config.TopP.HasValue)
+                {
+                    System.Console.WriteLine($", Sampling: Top-K + Top-P (k={config.TopK.Value}, p={config.TopP.Value})");
+                }
+                else if (config.TopK.HasValue)
                 {
                     System.Console.WriteLine($", Sampling: Top-K (k={config.TopK.Value})");
                 }
                 else if (config.TopP.HasValue)
                 {
                     System.Console.WriteLine($", Sampling: Top-P (p={config.TopP.Value})");
+                }
+                else if (config.Temperature != 1.0f)
+                {
+                    System.Console.WriteLine(", Sampling: Temperature");
                 }
                 else
                 {

@@ -35,7 +35,7 @@ Three projects:
 |-----------|---------|
 | `Gemma/` | Transformer layers: `Gemma4Model`, `MultiHeadAttention` (GQA + sliding window), `FeedForward`, `RotaryEmbedding`, `KvCache` |
 | `Tensor/` | Native tensor library — `Tensor` (1-3D float arrays), `TensorOperations` (MatMul, Softmax, RmsNorm, EmbeddingLookup, broadcasting) |
-| `Inference/` | `IInferenceEngine` / `TransformerInferenceEngine` / `DeterministicInferenceEngine`; `ISamplingStrategy` / `GreedySampling` / `TopKSampling` / `TopPSampling`; `GenerationConfig` |
+| `Inference/` | `IInferenceEngine` / `TransformerInferenceEngine` / `DeterministicInferenceEngine`; `ISamplingStrategy` / `GreedySampling` / `TopKSampling` / `TopPSampling` / `CombinedSampling` (temperature + top-k + top-p pipeline); `GenerationConfig` |
 | `Model/` | `ModelLoader` (config.json + weights), `ModelConfiguration`, `ModelWeights`, sharded-model support via SafeTensorIndex |
 | `SafeTensors/` | `ISafeTensorLoader`, `SafeTensorLoader` (single file), `ShardedSafeTensorLoader` (multi-file); memory-mapped to handle >2 GB weights |
 | `Tokenization/` | `ITokenizer`; `GemmaTokenizer` (BPE), `SentencePieceTokenizer`, `ByteTokenizer` (UTF-8 fallback) |

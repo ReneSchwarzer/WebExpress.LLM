@@ -1,5 +1,3 @@
-using System;
-
 namespace WebExpress.LLM.Inference;
 
 /// <summary>
@@ -44,33 +42,45 @@ public sealed class GenerationConfig
     /// Gets the repetition penalty factor applied to already-generated tokens.
     /// Values greater than 1.0 penalize repeats; 1.0 disables the penalty.
     /// </summary>
-    public float RepetitionPenalty { get; init; } = 1.0f;
+    public float RepetitionPenalty { get; init; } = 1.1f;
 
     /// <summary>
     /// Creates and returns an appropriate sampling strategy based on the configured parameters.
     /// </summary>
-    /// <remarks>Only one sampling strategy can be selected at a time. If both TopK and TopP are unset, greedy
-    /// sampling is used by default.</remarks>
-    /// <returns>An implementation of ISamplingStrategy determined by the current settings. Returns a TopKSampling instance if
-    /// TopK is specified, a TopPSampling instance if TopP is specified, or a GreedySampling instance if neither is set.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if both TopK and TopP parameters are specified at the same time.</exception>
+    /// <remarks>
+    /// The strategy is selected as follows:
+    /// <list type="bullet">
+    ///   <item>No sampling controls (no <see cref="TopK"/>, no <see cref="TopP"/>, and a default
+    ///     <see cref="Temperature"/> of 1.0) — <see cref="GreedySampling"/>.</item>
+    ///   <item>Only <see cref="TopK"/> with a default temperature — <see cref="TopKSampling"/>.</item>
+    ///   <item>Only <see cref="TopP"/> with a default temperature — <see cref="TopPSampling"/>.</item>
+    ///   <item>Any other combination — including both <see cref="TopK"/> and <see cref="TopP"/>
+    ///     together, or a non-default <see cref="Temperature"/> — <see cref="CombinedSampling"/>,
+    ///     which applies the repetition penalty, temperature, top-k, and top-p filters in sequence.</item>
+    /// </list>
+    /// </remarks>
+    /// <returns>An implementation of <see cref="ISamplingStrategy"/> determined by the current settings.</returns>
     public ISamplingStrategy CreateSamplingStrategy()
     {
-        if (TopK.HasValue && TopP.HasValue)
-        {
-            throw new InvalidOperationException("Cannot specify both TopK and TopP sampling.");
-        }
+        // A temperature other than 1.0 means the distribution must be scaled, which only the combined
+        // pipeline honors; top-k and top-p can also be applied together there.
+        var hasTemperature = Temperature != 1.0f;
 
-        if (TopK.HasValue)
+        if (!hasTemperature && TopK.HasValue && !TopP.HasValue)
         {
             return new TopKSampling(TopK.Value, Seed, RepetitionPenalty);
         }
 
-        if (TopP.HasValue)
+        if (!hasTemperature && TopP.HasValue && !TopK.HasValue)
         {
             return new TopPSampling(TopP.Value, Seed, RepetitionPenalty);
         }
 
-        return new GreedySampling(RepetitionPenalty);
+        if (!hasTemperature && !TopK.HasValue && !TopP.HasValue)
+        {
+            return new GreedySampling(RepetitionPenalty);
+        }
+
+        return new CombinedSampling(Temperature, TopK, TopP, Seed, RepetitionPenalty);
     }
 }

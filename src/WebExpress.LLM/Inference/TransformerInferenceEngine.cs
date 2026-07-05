@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using WebExpress.LLM.Gemma;
 using WebExpress.LLM.Model;
@@ -92,8 +93,13 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
 
         for (var i = 0; i < maxNewTokens; i++)
         {
-            var logits = ForwardPass(contextTokens);
+            var logits = ForwardPass(i == 0 ? contextTokens : new[] { contextTokens[^1] });
             var nextToken = _samplingStrategy.Sample(logits, contextTokens);
+
+            if (_model.Configuration.EosTokenIds.Contains(nextToken))
+            {
+                break;
+            }
 
             generatedTokens.Add(nextToken);
             contextTokens.Add(nextToken);
@@ -147,7 +153,7 @@ public sealed class TransformerInferenceEngine : IInferenceEngine
             // Yield to allow the scheduler to process other work
             await Task.Yield();
 
-            var logits = ForwardPass(contextTokens);
+            var logits = ForwardPass(i == 0 ? contextTokens : new[] { contextTokens[^1] });
             var nextToken = _samplingStrategy.Sample(logits, contextTokens);
 
             yield return nextToken;

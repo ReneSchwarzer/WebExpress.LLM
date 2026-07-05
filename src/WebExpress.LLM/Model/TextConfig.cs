@@ -143,12 +143,28 @@ public sealed class TextConfig
     [JsonPropertyName("bos_token_id")]
     public int BosTokenId { get; init; }
 
+    private readonly IReadOnlyList<int> _eosTokenIds;
+
+    /// <summary>
+    /// Gets the list of end-of-sequence token identifiers.
+    /// </summary>
+    [JsonPropertyName("eos_token_id")]
+    [JsonConverter(typeof(IntListOrArrayConverter))]
+    public IReadOnlyList<int> EosTokenIds
+    {
+        get => _eosTokenIds ?? Array.Empty<int>();
+        init => _eosTokenIds = value;
+    }
+
     /// <summary>
     /// Gets the end-of-sequence token identifier.
     /// </summary>
-    [JsonPropertyName("eos_token_id")]
-    [JsonConverter(typeof(IntOrArrayConverter))]
-    public int EosTokenId { get; init; }
+    [JsonIgnore]
+    public int EosTokenId
+    {
+        get => EosTokenIds.Count > 0 ? EosTokenIds[0] : 0;
+        init => _eosTokenIds = new[] { value };
+    }
 
     /// <summary>
     /// Gets the padding token identifier.

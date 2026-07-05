@@ -14,7 +14,8 @@
       "Bash(cp /tmp/vllm-extract/vllm-main/vllm/model_executor/models/gemma3.py /c/Users/Rene/source/repos/WebExpress.LLM/.tmp_vllm_gemma3.py)",
       "Bash(git stash *)",
       "Bash(rm -f .tmp_vllm_gemma3.py .tmp_vllm_gemma4.py .tmp_vllm_gemma4_rope.py vllm-main.zip)",
-      "Bash(rm -rf /tmp/vllm-extract)"
+      "Bash(rm -rf /tmp/vllm-extract)",
+      "WebFetch(domain:ai.google.dev)"
     ]
   }
 }
