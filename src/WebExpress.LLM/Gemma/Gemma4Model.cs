@@ -128,14 +128,15 @@ public sealed class Gemma4Model
         {
             hidden = TransformerLayer(
                 hidden, layer, numQueryHeads, numKvHeads, headDim, rmsEps,
-                perLayerInputs);
+                perLayerInputs,
+                tokenIds.Length);
         }
 
-        // 3. Final RMS normalization
+        // 4. Final RMS normalization
         var finalNormWeight = _loader.LoadTensor("model.language_model.norm.weight");
         hidden = TensorOperations.RmsNorm(hidden, finalNormWeight, rmsEps);
 
-        // 4. Project to vocabulary logits
+        // 5. Project to vocabulary logits
         // Get the last position's hidden state
         var lastHidden = hidden.GetLastRow();
         var lastHidden2D = lastHidden.Reshape(1, hiddenSize);
@@ -198,7 +199,8 @@ public sealed class Gemma4Model
         int numKvHeads,
         int headDim,
         float rmsEps,
-        Tensor.Tensor perLayerInputs
+        Tensor.Tensor perLayerInputs,
+        int tokenCountForReservation
     )
     {
         var prefix = $"model.language_model.layers.{layerIndex}";
@@ -250,6 +252,15 @@ public sealed class Gemma4Model
         {
             effectiveHeadDim = _config.TextConfig.GlobalHeadDimension;
         }
+
+        // Reserve the per-layer KV cache buffer once per Forward(). Capacity is the model's
+        // context length (typical upper bound on KV-cache size); if that's missing in the
+        // config we fall back to the current token count so the buffer grows on demand.
+        // Idempotent: subsequent calls during the same session are no-ops.
+        var reserveCapacity = Math.Max(
+            _config.ContextLength > 0 ? _config.ContextLength : tokenCountForReservation,
+            1);
+        _kvCache.Reserve(layerIndex, effectiveKvHeads, effectiveHeadDim, reserveCapacity);
 
         // Create RoPE for this layer type
         var ropeParams = _config.TextConfig?.RopeParameters;

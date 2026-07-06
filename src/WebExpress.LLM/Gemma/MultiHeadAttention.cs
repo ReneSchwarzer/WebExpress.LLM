@@ -215,10 +215,21 @@ public sealed class MultiHeadAttention
             // apply RoPE to K
             K = _rope.Apply(K, startPosition);
 
-            // update own KV cache
+            // append to own KV cache. Prefer the span-based path (no intermediate
+            // tensor copy); the view returned by Get is a zero-copy slice into the
+            // cache's pre-allocated buffer.
             if (kvCache != null)
             {
-                kvCache.Update(layerIndex, K, V);
+                // Idempotent reserve: ensure the cache has a buffer for this layer.
+                // We don't know the model's context length from inside the attention
+                // layer, so seed the capacity with the current call's seqLen and let
+                // the cache double on demand. Gemma4Model calls Reserve() with the
+                // real context length to avoid any growth during normal generation.
+                if (!kvCache.HasLayer(layerIndex))
+                {
+                    kvCache.Reserve(layerIndex, _numKvHeads, _headDim, Math.Max(seqLen, 64));
+                }
+                kvCache.Append(layerIndex, K.DataSpan, V.DataSpan);
                 var cached = kvCache.Get(layerIndex);
                 K = cached.Keys;
                 V = cached.Values;

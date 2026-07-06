@@ -18,7 +18,24 @@ public sealed class Tensor
 {
     private readonly float[] _data;
     private readonly int[] _shape;
+    private readonly int[] _strides;
+    private readonly int _offset;
     private const int TileSize = 32;
+
+    /// <summary>
+    /// Computes contiguous (row-major) strides for a shape: <c>strides[i] = product(shape[i+1..])</c>.
+    /// </summary>
+    private static int[] ComputeContiguousStrides(int[] shape)
+    {
+        var strides = new int[shape.Length];
+        var acc = 1;
+        for (var i = shape.Length - 1; i >= 0; i--)
+        {
+            strides[i] = acc;
+            acc *= shape[i];
+        }
+        return strides;
+    }
 
     /// <summary>
     /// Initializes a new tensor with the specified shape, filled with zeros.
@@ -31,6 +48,8 @@ public sealed class Tensor
 
         _shape = (int[])shape.Clone();
         _data = new float[ComputeLength(shape)];
+        _offset = 0;
+        _strides = ComputeContiguousStrides(_shape);
     }
 
     /// <summary>
@@ -54,6 +73,96 @@ public sealed class Tensor
 
         _shape = (int[])shape.Clone();
         _data = (float[])data.Clone();
+        _offset = 0;
+        _strides = ComputeContiguousStrides(_shape);
+    }
+
+    /// <summary>
+    /// Initializes a new tensor that is a view into the supplied buffer at the given offset.
+    /// The tensor owns no memory: the caller must keep <paramref name="data"/> alive for the
+    /// tensor's lifetime. Use <see cref="Clone"/> to detach a view from its backing storage.
+    /// </summary>
+    /// <param name="shape">The dimensions of the view.</param>
+    /// <param name="data">The backing buffer.</param>
+    /// <param name="offset">Index into <paramref name="data"/> where the view begins.</param>
+    /// <param name="length">Number of elements the view exposes. Must equal the product of <paramref name="shape"/>.</param>
+    public Tensor(int[] shape, float[] data, int offset, int length)
+    {
+        ValidateShape(shape);
+        ArgumentNullException.ThrowIfNull(data);
+
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), "Offset must be non-negative.");
+        }
+
+        var expectedLength = ComputeLength(shape);
+
+        if (length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"View length {length} does not match shape {string.Join("x", shape)} (expected {expectedLength}).");
+        }
+
+        if ((long)offset + length > data.Length)
+        {
+            throw new ArgumentException(
+                $"View extends past the end of the backing buffer (offset {offset} + length {length} > data.Length {data.Length}).");
+        }
+
+        _shape = (int[])shape.Clone();
+        _data = data;
+        _offset = offset;
+        _strides = ComputeContiguousStrides(_shape);
+    }
+
+    /// <summary>
+    /// Initializes a new tensor that is a view into the supplied buffer with explicit
+    /// per-dimension strides. Used by the KV cache to expose padded buffers (where
+    /// the stride between heads is larger than <c>numHeads * headDim</c> because the
+    /// backing buffer reserves extra capacity for future appends).
+    /// </summary>
+    public Tensor(int[] shape, float[] data, int offset, int length, int[] strides)
+    {
+        ValidateShape(shape);
+        ArgumentNullException.ThrowIfNull(data);
+        ArgumentNullException.ThrowIfNull(strides);
+
+        if (strides.Length != shape.Length)
+        {
+            throw new ArgumentException(
+                $"Strides length {strides.Length} must match shape rank {shape.Length}.");
+        }
+
+        if (offset < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset), "Offset must be non-negative.");
+        }
+
+        var expectedLength = ComputeLength(shape);
+
+        if (length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"View length {length} does not match shape {string.Join("x", shape)} (expected {expectedLength}).");
+        }
+
+        // Verify no element goes past the buffer: max flat index = offset + sum(strides[i] * (shape[i] - 1)).
+        var maxFlat = offset;
+        for (var i = 0; i < shape.Length; i++)
+        {
+            maxFlat += strides[i] * (shape[i] - 1);
+        }
+        if (maxFlat >= data.Length)
+        {
+            throw new ArgumentException(
+                $"View strides reach past the end of the backing buffer (max flat index {maxFlat} >= data.Length {data.Length}).");
+        }
+
+        _shape = (int[])shape.Clone();
+        _data = data;
+        _offset = offset;
+        _strides = (int[])strides.Clone();
     }
 
     /// <summary>
@@ -63,7 +172,31 @@ public sealed class Tensor
     {
         _shape = shape;
         _data = data;
+        _offset = 0;
+        _strides = ComputeContiguousStrides(shape);
     }
+
+    /// <summary>
+    /// Returns a span over the tensor's elements, including any view offset.
+    /// </summary>
+    internal ReadOnlySpan<float> DataSpan => _data.AsSpan(_offset, _shape.Length == 0 ? 0 : ComputeLength(_shape));
+
+    /// <summary>
+    /// Returns a span over the underlying backing buffer at the view's offset with the view's element count.
+    /// </summary>
+    internal Span<float> DataSpanWritable => _data.AsSpan(_offset, ComputeLength(_shape));
+
+    /// <summary>
+    /// The element offset into the backing buffer where this tensor's data begins. Zero for
+    /// tensors that own their storage; non-zero for views created via the offset constructor.
+    /// </summary>
+    internal int DataOffset => _offset;
+
+    /// <summary>
+    /// The number of elements exposed by this tensor. For owning tensors this equals
+    /// <see cref="Length"/>; for views it equals the view's logical element count.
+    /// </summary>
+    internal int DataLength => ComputeLength(_shape);
 
     /// <summary>
     /// Gets the shape of this tensor as a read-only list of dimension sizes.
@@ -90,8 +223,8 @@ public sealed class Tensor
     /// </summary>
     public float this[int index]
     {
-        get => _data[index];
-        set => _data[index] = value;
+        get { return _data[_offset + index]; }
+        set { _data[_offset + index] = value; }
     }
 
     /// <summary>
@@ -99,8 +232,8 @@ public sealed class Tensor
     /// </summary>
     public float this[int row, int col]
     {
-        get => _data[row * _shape[^1] + col];
-        set => _data[row * _shape[^1] + col] = value;
+        get { return _data[_offset + _strides[0] * row + _strides[1] * col]; }
+        set { _data[_offset + _strides[0] * row + _strides[1] * col] = value; }
     }
 
     /// <summary>
@@ -108,8 +241,8 @@ public sealed class Tensor
     /// </summary>
     public float this[int dim0, int dim1, int dim2]
     {
-        get => _data[(dim0 * _shape[1] + dim1) * _shape[2] + dim2];
-        set => _data[(dim0 * _shape[1] + dim1) * _shape[2] + dim2] = value;
+        get { return _data[_offset + _strides[0] * dim0 + _strides[1] * dim1 + _strides[2] * dim2]; }
+        set { _data[_offset + _strides[0] * dim0 + _strides[1] * dim1 + _strides[2] * dim2] = value; }
     }
 
     /// <summary>
