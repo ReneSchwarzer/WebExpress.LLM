@@ -30,6 +30,10 @@ internal class Program
     /// </returns>
     private static async Task<int> Main(string[] args)
     {
+        // Set console encoding to UTF-8 to properly display Unicode characters (e.g., emojis)
+        System.Console.OutputEncoding = System.Text.Encoding.UTF8;
+        System.Console.InputEncoding = System.Text.Encoding.UTF8;
+
         // display welcome message to the user
         System.Console.WriteLine("WebExpress.LLM - Interactive Chat");
         System.Console.WriteLine("==================================");
@@ -177,10 +181,32 @@ internal class Program
                 var previousCpuTime = process.TotalProcessorTime;
                 var previousCpuSample = stopwatch.Elapsed;
                 var previousIoOps = GetProcessIoOperationCount(process) ?? 0UL;
+                var fullResponse = new System.Text.StringBuilder();
+                var outputBuffer = new System.Text.StringBuilder();
+                const string stopSequence = "<turn|>";
 
                 await foreach (var textChunk in chatSession.SendAsync(userInput, maxNewTokens: maxNewTokens))
                 {
                     tokenCount++;
+                    fullResponse.Append(textChunk);
+
+                    // Check if we've reached the stop sequence
+                    var currentText = fullResponse.ToString();
+                    if (currentText.Contains(stopSequence))
+                    {
+                        // Find the stop sequence position
+                        var stopIndex = currentText.IndexOf(stopSequence, StringComparison.Ordinal);
+                        var textBeforeStop = currentText.Substring(0, stopIndex);
+
+                        // Output any remaining text before stop sequence
+                        var alreadyOutput = outputBuffer.Length;
+                        if (textBeforeStop.Length > alreadyOutput)
+                        {
+                            System.Console.Write(textBeforeStop.Substring(alreadyOutput));
+                        }
+                        break;
+                    }
+
                     var elapsedSeconds = Math.Max(stopwatch.Elapsed.TotalSeconds, 1e-9);
                     var tokensPerSecond = tokenCount / elapsedSeconds;
                     var lastTokenSeconds = Math.Max(elapsedSeconds - previousElapsedSeconds, 0.0);
@@ -209,7 +235,8 @@ internal class Program
                         $"RAM:  {ramGb:0.00} GB",
                         $"HDD:  {hddOpsPerSecond:0.0} ops/s");
 
-                    System.Console.Write($"{textChunk} ");
+                    System.Console.Write(textChunk);
+                    outputBuffer.Append(textChunk);
                 }
 
                 System.Console.WriteLine();

@@ -31,6 +31,9 @@ public sealed class ByteTokenizer : ITokenizer
     /// <param name="tokens">
     /// The sequence of integer tokens to decode. Each token must be within the range of 0 to 255, inclusive.
     /// </param>
+    /// <param name="stripLeadingSpace">
+    /// Ignored by <see cref="ByteTokenizer"/> (only applies to SentencePiece-style tokenizers).
+    /// </param>
     /// <returns>
     /// A string decoded from the specified UTF-8 byte tokens.
     /// </returns>
@@ -40,7 +43,7 @@ public sealed class ByteTokenizer : ITokenizer
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown if any token in <paramref name="tokens"/> is less than 0 or greater than 255.
     /// </exception>
-    public string Decode(IEnumerable<int> tokens)
+    public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true)
     {
         ArgumentNullException.ThrowIfNull(tokens);
 

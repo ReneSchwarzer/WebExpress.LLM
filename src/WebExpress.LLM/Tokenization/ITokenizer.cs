@@ -22,5 +22,17 @@ public interface ITokenizer
     /// </summary>
     /// <param name="tokens">The sequence of integer tokens to decode. Cannot be null.</param>
     /// <returns>A string representing the decoded value of the input tokens.</returns>
-    string Decode(IEnumerable<int> tokens);
+    string Decode(IEnumerable<int> tokens) => Decode(tokens, stripLeadingSpace: true);
+
+    /// <summary>
+    /// Decodes a sequence of integer tokens into the corresponding string representation.
+    /// </summary>
+    /// <param name="tokens">The sequence of integer tokens to decode. Cannot be null.</param>
+    /// <param name="stripLeadingSpace">
+    /// Whether to remove the leading space from the decoded output. 
+    /// Set to <c>false</c> when decoding individual tokens for streaming output.
+    /// Defaults to <c>true</c> to match standard SentencePiece behavior.
+    /// </param>
+    /// <returns>A string representing the decoded value of the input tokens.</returns>
+    string Decode(IEnumerable<int> tokens, bool stripLeadingSpace);
 }

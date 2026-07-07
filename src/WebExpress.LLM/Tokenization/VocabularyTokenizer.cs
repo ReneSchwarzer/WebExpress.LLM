@@ -79,10 +79,13 @@ public sealed class VocabularyTokenizer : ITokenizer
     /// <param name="tokens">
     /// The sequence of integer token IDs to decode. Cannot be null.
     /// </param>
+    /// <param name="stripLeadingSpace">
+    /// Ignored by <see cref="VocabularyTokenizer"/> (only applies to SentencePiece-style tokenizers).
+    /// </param>
     /// <returns>
     /// A string containing the decoded text. Unknown token IDs are represented as "<unk>".
     /// </returns>
-    public string Decode(IEnumerable<int> tokens)
+    public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true)
     {
         ArgumentNullException.ThrowIfNull(tokens);
 

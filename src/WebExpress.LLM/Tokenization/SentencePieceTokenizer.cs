@@ -148,14 +148,21 @@ public sealed class SentencePieceTokenizer : ITokenizer
 
     /// <summary>
     /// Decodes a sequence of integer tokens into the corresponding string representation.
+    /// Replaces the SentencePiece space symbol (▁) with actual spaces.
     /// </summary>
     /// <param name="tokens">The sequence of integer tokens to decode. Cannot be null.</param>
+    /// <param name="stripLeadingSpace">
+    /// Whether to remove the leading space from the decoded output. 
+    /// Set to <c>false</c> when decoding individual tokens for streaming output.
+    /// Defaults to <c>true</c> to match standard SentencePiece behavior.
+    /// </param>
     /// <returns>A string representing the decoded text.</returns>
-    public string Decode(IEnumerable<int> tokens)
+    public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true)
     {
         ArgumentNullException.ThrowIfNull(tokens);
 
         var sb = new StringBuilder();
+        var firstNonSpecialPiece = true;
 
         foreach (var tokenId in tokens)
         {
@@ -167,22 +174,27 @@ public sealed class SentencePieceTokenizer : ITokenizer
 
             if (_idToPiece.TryGetValue(tokenId, out var piece))
             {
-                sb.Append(piece);
+                // Only remove the leading ▁ from the very first piece when requested
+                if (stripLeadingSpace && firstNonSpecialPiece && piece.StartsWith(SpaceSymbol))
+                {
+                    sb.Append(piece[1..]);
+                    firstNonSpecialPiece = false;
+                }
+                else
+                {
+                    sb.Append(piece);
+                    firstNonSpecialPiece = false;
+                }
             }
             else
             {
                 sb.Append("<unk>");
+                firstNonSpecialPiece = false;
             }
         }
 
         // Replace the SentencePiece space symbol with actual spaces
         sb.Replace(SpaceSymbol, ' ');
-
-        // Remove leading space that results from the initial ▁ prefix
-        if (sb.Length > 0 && sb[0] == ' ')
-        {
-            sb.Remove(0, 1);
-        }
 
         return sb.ToString();
     }

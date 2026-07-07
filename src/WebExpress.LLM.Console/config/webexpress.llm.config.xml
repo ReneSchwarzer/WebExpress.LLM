@@ -10,7 +10,7 @@
 	<!-- Inference configuration: controls text generation behavior -->
 	<inference>
 		<!-- Maximum number of new tokens to generate per response -->
-		<maxNewTokens>100</maxNewTokens>
+		<maxNewTokens>999999</maxNewTokens>
 
 		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
 		<temperature>0.8</temperature>

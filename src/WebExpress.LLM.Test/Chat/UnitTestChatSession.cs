@@ -143,7 +143,7 @@ public sealed class UnitTestChatSession
     private sealed class WhitespaceTokenizer : ITokenizer
     {
         public IReadOnlyList<int> Encode(string text) => text.Select(static c => (int)c).ToArray();
-        public string Decode(IEnumerable<int> tokens) 
+        public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true) 
         {
             var tokenList = tokens.ToList();
             if (tokenList.Count == 1)
@@ -157,7 +157,7 @@ public sealed class UnitTestChatSession
     {
         public IReadOnlyList<int> Encode(string text) => text.Select(static character => (int)character).ToArray();
 
-        public string Decode(IEnumerable<int> tokens) => new(tokens.Select(static token => (char)token).ToArray());
+        public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true) => new(tokens.Select(static token => (char)token).ToArray());
     }
 
     /// <summary>
@@ -173,7 +173,7 @@ public sealed class UnitTestChatSession
             return text.Select(static character => (int)character).ToArray();
         }
 
-        public string Decode(IEnumerable<int> tokens) => new(tokens.Select(static token => (char)token).ToArray());
+        public string Decode(IEnumerable<int> tokens, bool stripLeadingSpace = true) => new(tokens.Select(static token => (char)token).ToArray());
     }
 
     private sealed class MockInferenceEngine : IInferenceEngine

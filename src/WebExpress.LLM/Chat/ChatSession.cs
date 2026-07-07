@@ -149,7 +149,7 @@ public sealed class ChatSession
         await foreach (var token in _inferenceEngine.GenerateTokensAsync(promptTokens, maxNewTokens))
         {
             responseTokens.Add(token);
-            var decodedText = _tokenizer.Decode([token]);
+            var decodedText = _tokenizer.Decode([token], stripLeadingSpace: false);
             yield return decodedText;
         }
 
