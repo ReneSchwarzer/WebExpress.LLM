@@ -322,6 +322,11 @@ public sealed class SafeTensorLoader : ISafeTensorLoader
     }
 
     /// <summary>
+    /// Internal test entry point for benchmarking BF16 conversion.
+    /// </summary>
+    internal static float[] TestConvertBF16(byte[] bytes) => ConvertBF16(bytes);
+
+    /// <summary>
     /// Converts IEEE 754 half-precision (16-bit) to single-precision (32-bit) float.
     /// </summary>
     private static float HalfToFloat(ushort halfBits)

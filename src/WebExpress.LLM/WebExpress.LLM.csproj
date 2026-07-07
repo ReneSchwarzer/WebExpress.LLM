@@ -26,6 +26,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="WebExpress.LLM.Test" />
+		<InternalsVisibleTo Include="BenchmarkSuite1" />
 	</ItemGroup>
 
 	<ItemGroup>

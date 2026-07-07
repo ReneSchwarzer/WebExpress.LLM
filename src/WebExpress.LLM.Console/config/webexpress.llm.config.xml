@@ -10,7 +10,7 @@
 	<!-- Inference configuration: controls text generation behavior -->
 	<inference>
 		<!-- Maximum number of new tokens to generate per response -->
-		<maxNewTokens>999999</maxNewTokens>
+		<maxNewTokens>512</maxNewTokens>
 
 		<!-- Temperature for sampling randomness (higher = more creative, lower = more focused) -->
 		<temperature>0.8</temperature>
@@ -23,9 +23,9 @@
 
 		<!-- Seed for deterministic random generation (uncomment to enable) -->
 		<!-- <seed>42</seed> -->
-		
-        <!-- Repetition penalty: reduces repeated token loops (1.0 = disabled, >1.0 = stronger penalty) -->
-		<repetitionPenalty>1.0</repetitionPenalty>
+
+		<!-- Repetition penalty: reduces repeated token loops (1.0 = disabled, >1.0 = stronger penalty) -->
+		<repetitionPenalty>1.15</repetitionPenalty>
 	</inference>
 
 	<!-- Tokenizer configuration: defines how text is converted to tokens -->

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 
 namespace WebExpress.LLM.Tensor;
@@ -382,24 +384,41 @@ public sealed class Tensor
         var cols = _shape[1];
         var result = new float[rows * cols];
 
-        Parallel.For(0, (rows + TileSize - 1) / TileSize, blockIdx =>
+        // Optimized cache-blocked transpose with better memory access patterns
+        TransposeBlocked(_data, result, rows, cols);
+
+        return new Tensor([cols, rows], result, noCopy: true);
+    }
+
+    /// <summary>
+    /// Cache-blocked transpose with optimized memory access patterns.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private static void TransposeBlocked(float[] src, float[] dst, int rows, int cols)
+    {
+        // Process column blocks in parallel to maximize cache efficiency
+        Parallel.For(0, (cols + TileSize - 1) / TileSize, colBlock =>
         {
-            int i0 = blockIdx * TileSize;
-            int iMax = Math.Min(i0 + TileSize, rows);
-            for (var j0 = 0; j0 < cols; j0 += TileSize)
+            var colStart = colBlock * TileSize;
+            var colEnd = Math.Min(colStart + TileSize, cols);
+
+            // Process row blocks sequentially within each column block
+            for (var rowBlock = 0; rowBlock < (rows + TileSize - 1) / TileSize; rowBlock++)
             {
-                var jMax = Math.Min(j0 + TileSize, cols);
-                for (var i = i0; i < iMax; i++)
+                var rowStart = rowBlock * TileSize;
+                var rowEnd = Math.Min(rowStart + TileSize, rows);
+
+                // Transpose the tile with optimal memory access order
+                for (var j = colStart; j < colEnd; j++)
                 {
-                    for (var j = j0; j < jMax; j++)
+                    var dstRowBase = j * rows;
+                    for (var i = rowStart; i < rowEnd; i++)
                     {
-                        result[j * rows + i] = _data[i * cols + j];
+                        dst[dstRowBase + i] = src[i * cols + j];
                     }
                 }
             }
         });
-
-        return new Tensor([cols, rows], result, noCopy: true);
     }
 
     /// <summary>
